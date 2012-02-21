@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 
 int
-open_tap(char *dev, char *ip, char *mac)
+open_tap(char *dev, char *ip, char *mac, int mtu)
 {
     int fd, sock;
     struct ifreq ifr;
@@ -42,7 +42,7 @@ open_tap(char *dev, char *ip, char *mac)
         return -1;
     }
 
-#if 0
+#if 1
     if (inet_aton(ip, (struct in_addr *) &local_ip) == 0) {
         fprintf(stderr, "inet_aton failed\n");
         close(fd);
@@ -62,7 +62,7 @@ open_tap(char *dev, char *ip, char *mac)
         return -1;
     }
 
-    ifr.ifr_mtu = 1200;
+    ifr.ifr_mtu = mtu;
     if (ioctl(sock, SIOCSIFMTU, &ifr) < 0) {
         fprintf(stderr, "set mtu failed\n");
         close(fd);

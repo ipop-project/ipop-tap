@@ -5,12 +5,15 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <pwd.h>
 
-#define MTU 1300
+#define MTU 1200
 
 int translate_headers(char *buf, const char *source, const char *dest,
     const char *mac, ssize_t len);
-int create_arp_response(char *buf, char *mac);
+int create_arp_response(char *buf);
 
 typedef struct thread_opts {
     int sock;
@@ -19,6 +22,27 @@ typedef struct thread_opts {
 } thread_opts_t;
 
 struct sockaddr_in _dest;
+
+static int
+get_dest_addr(struct sockaddr_in *dest, const char *buf, size_t len)
+{
+    //TODO - Implement
+    memcpy(dest, &_dest, len);
+    return 0;
+}
+
+static int
+get_ip_addrs(const char *buf, char *source, char *dest, size_t len)
+{
+    //TODO - Implement
+    char tmp_s[] = {172, 31, 0, 3};
+    char tmp_d[] = {172, 31, 0, 2};
+
+    memcpy(source, tmp_s, 4);
+    memcpy(dest, tmp_d, 4);
+
+    return 0;
+}
 
 static int
 create_udp_socket(uint16_t port)
@@ -47,13 +71,6 @@ create_udp_socket(uint16_t port)
     return sock;
 }
 
-static int
-get_dest_addr(struct sockaddr_in *dest, const char *buf, size_t len)
-{
-    memcpy(dest, &_dest, len);
-    return 0;
-}
-
 static void *
 udp_send_thread(void *data)
 {
@@ -76,7 +93,7 @@ udp_send_thread(void *data)
         printf("read from tap %d\n", rcount);
 
         if (buf[12] == 0x08 && buf[13] == 0x06) {
-            if (create_arp_response(buf, opts->mac) == 0) {
+            if (create_arp_response(buf) == 0) {
                 write(tap, buf, rcount);
             }
         }
@@ -108,9 +125,8 @@ udp_recv_thread(void *data)
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     char buf[MTU];
-
-    char source[] = {172, 31, 0, 3};
-    char dest[] = {172, 31, 0, 2};
+    char source[4];
+    char dest[4];
 
     while (1) {
 
@@ -121,6 +137,11 @@ udp_recv_thread(void *data)
         }
 
         printf("recv from udp %d\n", rcount);
+
+        if (get_ip_addrs(buf, source, dest, rcount) < 0) {
+            fprintf(stderr, "ip not found\n");
+            continue;
+        }
 
         if (translate_headers(buf, source, dest, opts->mac, rcount) < 0) {
             fprintf(stderr, "translate error\n");
@@ -137,7 +158,6 @@ udp_recv_thread(void *data)
     pthread_exit(NULL);
 }
 
-
 int
 main(int argc, char *argv[])
 {
@@ -147,12 +167,29 @@ main(int argc, char *argv[])
     _dest.sin_port = htons(5800);
     _dest.sin_addr.s_addr = inet_addr(argv[1]);
 
-    char mac[6];
+    unsigned char mac[6];
     thread_opts_t opts;
     opts.mac = mac;
     opts.sock = create_udp_socket(5800);
-    opts.tap = open_tap("svpn0", "172.31.0.2", mac);
+    opts.tap = open_tap("svpn0", "172.31.0.2", mac, MTU);
 
+    struct passwd * pwd = getpwnam("nobody");
+
+    // drop root priviledges and set to nobody
+    if (getuid() == 0) {
+        if (setgid(pwd->pw_uid) < 0) {
+            fprintf(stderr, "setgid failed\n");
+            close(opts.tap);
+            close(opts.sock);
+            return -1;
+        }
+        if (setuid(pwd->pw_gid) < 0) {
+            fprintf(stderr, "setuid failed\n");
+            close(opts.tap);
+            close(opts.sock);
+            return -1;
+        }
+    }
     pthread_t send_thread, recv_thread;
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
