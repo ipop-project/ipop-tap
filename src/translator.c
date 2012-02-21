@@ -10,13 +10,6 @@ int
 create_arp_response(char *buf, char *mac)
 {
     int i;
-    for (i = 0; i < 6; i++) {
-        mac[i] = buf[6 + i];
-        printf("%02X ", (unsigned char)mac[i]);
-    }
-    printf("\n");
-
-
     if (buf[40] == 0 && buf[41] == 2) {
         return -1;
     }

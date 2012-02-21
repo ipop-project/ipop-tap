@@ -147,11 +147,11 @@ main(int argc, char *argv[])
     _dest.sin_port = htons(5800);
     _dest.sin_addr.s_addr = inet_addr(argv[1]);
 
-    char mac[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    char mac[6];
     thread_opts_t opts;
     opts.mac = mac;
     opts.sock = create_udp_socket(5800);
-    opts.tap = open_tap("svpn0", "172.31.0.2");
+    opts.tap = open_tap("svpn0", "172.31.0.2", mac);
 
     pthread_t send_thread, recv_thread;
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);

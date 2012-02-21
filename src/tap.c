@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 
 int
-open_tap(char *dev, char *ip)
+open_tap(char *dev, char *ip, char *mac)
 {
     int fd, sock;
     struct ifreq ifr;
@@ -81,6 +81,15 @@ open_tap(char *dev, char *ip)
     }
 #endif
 
+    strcpy(ifr.ifr_name, dev);
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
+       fprintf(stderr, "get mac failed\n");
+        close(fd);
+        close(sock);
+        return -1;
+    }
+
+    memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
     return fd;
 }
 
