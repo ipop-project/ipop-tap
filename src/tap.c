@@ -10,7 +10,7 @@
 #include <linux/if_tun.h>
 #include <arpa/inet.h>
 
-static int
+int
 open_tap(char *dev, char *ip)
 {
     int fd, sock;
@@ -42,6 +42,7 @@ open_tap(char *dev, char *ip)
         return -1;
     }
 
+#if 0
     if (inet_aton(ip, (struct in_addr *) &local_ip) == 0) {
         fprintf(stderr, "inet_aton failed\n");
         close(fd);
@@ -78,17 +79,9 @@ open_tap(char *dev, char *ip)
         close(sock);
         return -1;
     }
+#endif
 
     return fd;
 }
 
-int
-main(int argc, char *argv[])
-{
-    char *mystring = NULL;
-    size_t n = 10;
-
-    open_tap("svpn0", "172.31.0.1");
-    getline(&mystring, &n, stdin);
-}
 
