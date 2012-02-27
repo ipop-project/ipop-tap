@@ -9,18 +9,12 @@
 #include <unistd.h>
 #include <pwd.h>
 
+#include <translator.h>
+#include <router.h>
+
 #define MTU 1200
 #define BUF_OFFSET 12
 #define BUFLEN MTU + BUF_OFFSET
-
-int translate_headers(char *buf, const char *source, const char *dest,
-    const char *mac, ssize_t len);
-int create_arp_response(char *buf);
-
-int add_route(const char *id, const char *local_ip, const char *dest_ip,
-    const uint16_t port);
-int get_dest_addr(struct sockaddr_in *addr, const char *local_ip);
-int get_source_addr(const char *id, char *source);
 
 typedef struct thread_opts {
     int sock;
@@ -91,7 +85,7 @@ udp_send_thread(void *data)
         }
         else {
 
-            while (get_dest_addr(&dest, obuf + 30, &idx) >= 0) {
+            while (get_dest_addr(&dest, obuf + 30, &idx, 1, obuf) >= 0) {
 
                 if (sendto(sock, buf, rcount + BUF_OFFSET, 0, 
                            (struct sockaddr*) &dest, addrlen) < 0) {
