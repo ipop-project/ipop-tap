@@ -68,11 +68,14 @@ udp_send_thread(void *data)
     socklen_t addrlen = sizeof(dest);
     char buf[BUFLEN];
     char *obuf = buf + BUF_OFFSET;
+    int idx;
 
     strncpy(buf, opts->id, BUF_OFFSET-1);
     buf[BUF_OFFSET - 1] = '\0';
 
     while (1) {
+
+        idx = 0;
 
         if ((rcount = read(tap, obuf, MTU)) < 0) {
             fprintf(stderr, "tap read failed\n");
@@ -87,17 +90,22 @@ udp_send_thread(void *data)
             }
         }
         else {
-            if (get_dest_addr(&dest, obuf + 30) < 0) {
-                fprintf(stderr, "no address found\n");
-                continue;
-            }
 
-            if (sendto(sock, buf, rcount + BUF_OFFSET, 0, 
-                       (struct sockaddr*) &dest, addrlen) < 0) {
-                fprintf(stderr, "sendto failed\n");
-                pthread_exit(NULL);
+            while (get_dest_addr(&dest, obuf + 30, &idx) >= 0) {
+
+                if (sendto(sock, buf, rcount + BUF_OFFSET, 0, 
+                           (struct sockaddr*) &dest, addrlen) < 0) {
+                    fprintf(stderr, "sendto failed %x\n", 
+                            (unsigned int) dest.sin_addr.s_addr);
+                }
+
+                printf("sent to udp %x %d\n", *(unsigned int*) obuf+30, 
+                        rcount);
+
+                if (idx++ == -1) {
+                    break;
+                }
             }
-            printf("sent to udp %d\n", rcount);
         }
     }
     pthread_exit(NULL);
