@@ -1,5 +1,6 @@
 
 #include <translator.h>
+#include <string.h>
 
 int
 create_arp_response(char *buf)
@@ -73,30 +74,14 @@ int
 translate_headers(char *buf, const char *source, const char *dest, 
     const char *mac, ssize_t len)
 {
-    int i;
-    int mcast = ((unsigned char) buf[30]) >= 224 && 
-                ((unsigned char) buf[30]) <= 239;
-
-    uint16_t *nbuf = (uint16_t *) buf;
-    uint16_t *nmac = (uint16_t *) mac;
-    uint16_t *nsource = (uint16_t *) source;
-    uint16_t *ndest = (uint16_t *) dest;
-
 #ifndef SVPN_TEST
-    for (i = 0; i < 3; i++) {
-        nbuf[i] = nmac[i];
-    }
+    memcpy(buf, mac, 6);
+    memset(buf + 6, 0xFF, 6);
+    memcpy(buf + 26, source, 4);
 
-    for (; i < 6; i++) {
-        nbuf[i] = 0xFFFF;
-    }
-
-    for (i = 0; i < 2; i++) {
-        nbuf[13+i] = nsource[i];
-
-        if (!mcast) {
-            nbuf[15+i] = ndest[i];
-        }
+    unsigned char iprange = (unsigned char) buf[30];
+    if (iprange < 224 || iprange > 239) {
+        memcpy(buf + 30, dest, 4);
     }
 #endif
 

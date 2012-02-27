@@ -131,7 +131,7 @@ udp_recv_thread(void *data)
         printf("recv from udp %d\n", rcount);
         printf("from %s\n", buf); 
 
-        if (get_source_addr(buf, source) < 0) {
+        if (get_source_addr(buf, obuf + 30, source) < 0) {
             fprintf(stderr, "ip not found\n");
             continue;
         }

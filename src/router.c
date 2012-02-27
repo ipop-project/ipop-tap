@@ -107,8 +107,13 @@ get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx,
 }
 
 int
-get_source_addr(const char *id, char *source)
+get_source_addr(const char *id, const char *dest_ip, char *source)
 {
+    if ((unsigned char) dest_ip[0] >= 224 &&
+        (unsigned char) dest_ip[0] <= 239) {
+        return 0;
+    }
+
     int i;
     for (i = 0; i < TABLE_SIZE; i++) {
 
