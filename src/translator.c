@@ -1,6 +1,6 @@
 
-#include <translator.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 int
 create_arp_response(char *buf)

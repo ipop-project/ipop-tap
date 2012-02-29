@@ -1,4 +1,10 @@
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
 #include <router.h>
 
 #define TABLE_SIZE 10
@@ -12,8 +18,10 @@ typedef struct peers_state {
 } peer_state_t;
 
 static peer_state_t table[TABLE_SIZE];
+in_addr_t _base_ip;
+in_addr_t _local_ip;
 
-void
+static void
 clear_table(void)
 {
     int i;
@@ -22,28 +30,43 @@ clear_table(void)
     }
 }
 
-int
-add_route(const char *id, const char *local_ip, const char *dest_ip, 
-    const uint16_t port)
+void set_local_ip(const char *local_ip)
 {
-    printf("adding %s %s %s %d\n", id, local_ip, dest_ip, port);
+    _local_ip = inet_addr(local_ip);
+    _base_ip = _local_ip;
+    unsigned char *ip = (unsigned char *)&_base_ip;
+    ip[3] = 100;
+    clear_table();
+}
+
+int
+add_route(const char *id, const char *dest_ip, const uint16_t port)
+{
 
     int i;
     for (i = 0; i < TABLE_SIZE; i++) {
 
         if (table[i].id[0] != 0) {
-            if (strncmp(id, table[i].id, ID_SIZE) != 0) {
-              continue;
+            if (strncmp(id, table[i].id, ID_SIZE) == 0) {
+                table[i].dest_ip = inet_addr(dest_ip);
+                table[i].port = port;
+                return 0;
+            }
+            else {
+                continue;
             }
         }
 
+        printf("adding %s %x %s %d\n", id, _base_ip, dest_ip, port);
+
         strncpy(table[i].id, id, ID_SIZE);
-        table[i].local_ip = inet_addr(local_ip);
+        table[i].local_ip = _base_ip;
         table[i].dest_ip = inet_addr(dest_ip);
         table[i].port = port;
+        unsigned char *ip = (unsigned char *)&_base_ip;
+        ip[3] += 1;
         return 0;
     }
-
     return -1;
 }
 
@@ -80,11 +103,7 @@ get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx,
             continue;
         }
 
-        // this is inefficient, need to figure out byte order
-        char *tmp_ip = (char *) &table[i].local_ip;
-
-        if (tmp_ip[3] == local_ip[3] && tmp_ip[2] == local_ip[2] && 
-            tmp_ip[1] == local_ip[1] && tmp_ip[0] == local_ip[0]) {
+        if (memcmp(&table[i].local_ip, local_ip, 4) == 0) {
 
             memset(addr, 0, sizeof(struct sockaddr_in));
             addr->sin_family = AF_INET;
@@ -95,9 +114,6 @@ get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx,
                 memcpy(dest_id, table[i].id, ID_SIZE);
             }
 
-            unsigned char *tmp = (unsigned char *)(&addr->sin_addr.s_addr);
-            printf("get dest %x %x %x %x\n", tmp[0], tmp[1], tmp[2], tmp[3]);
-
             *idx = -1;
             return 0;
         }
@@ -107,8 +123,12 @@ get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx,
 }
 
 int
-get_source_addr(const char *id, const char *dest_ip, char *source)
+get_source_addr(const char *id, const char *dest_ip, char *source, char *dest)
 {
+    if (dest != NULL) {
+        memcpy(dest, &_local_ip, 4);
+    }
+
     if ((unsigned char) dest_ip[0] >= 224 &&
         (unsigned char) dest_ip[0] <= 239) {
         return 0;

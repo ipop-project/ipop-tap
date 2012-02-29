@@ -10,15 +10,21 @@
 #include <linux/if_tun.h>
 #include <arpa/inet.h>
 
-int
-open_tap(char *dev, char *ip, char *mac, int mtu)
-{
-    int fd, sock;
-    struct ifreq ifr;
-    struct sockaddr_in addr;
-    in_addr_t local_ip;
+#include <tap.h>
 
+static int sock = -1;
+static struct ifreq ifr;
+
+int
+open_tap(char *dev, char *mac)
+{
+    int fd;
+
+#if DROID_BUILD
+    if ((fd = open("/dev/tun", O_RDWR)) < 0) {
+#else
     if ((fd = open("/dev/net/tun", O_RDWR)) < 0) {
+#endif
         fprintf(stderr, "open failed fd = %d\n", fd);
         return -1;   
     }
@@ -42,7 +48,24 @@ open_tap(char *dev, char *ip, char *mac, int mtu)
         return -1;
     }
 
-#if 1
+    strcpy(ifr.ifr_name, dev);
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
+       fprintf(stderr, "get mac failed\n");
+        close(fd);
+        close(sock);
+        return -1;
+    }
+
+    memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
+    return fd;
+}
+
+int
+configure_tap(int fd, char *ip, int mtu)
+{
+    struct sockaddr_in addr;
+    in_addr_t local_ip;
+
     if (inet_aton(ip, (struct in_addr *) &local_ip) == 0) {
         fprintf(stderr, "inet_aton failed\n");
         close(fd);
@@ -79,18 +102,7 @@ open_tap(char *dev, char *ip, char *mac, int mtu)
         close(sock);
         return -1;
     }
-#endif
 
-    strcpy(ifr.ifr_name, dev);
-    if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
-       fprintf(stderr, "get mac failed\n");
-        close(fd);
-        close(sock);
-        return -1;
-    }
-
-    memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
-    return fd;
+    return 0;
 }
-
 

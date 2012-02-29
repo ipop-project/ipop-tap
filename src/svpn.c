@@ -11,16 +11,19 @@
 
 #include <translator.h>
 #include <router.h>
+#include <tap.h>
 
 #define MTU 1200
 #define BUF_OFFSET 12
-#define BUFLEN MTU + BUF_OFFSET
+#define BUFLEN 2048
+#define ID_SIZE 12
 
 typedef struct thread_opts {
     int sock;
     int tap;
     char mac[6];
-    char *id;
+    char id[ID_SIZE];
+    char s_ip[16];
 } thread_opts_t;
 
 static int
@@ -64,16 +67,14 @@ udp_send_thread(void *data)
     char *obuf = buf + BUF_OFFSET;
     int idx;
 
-    strncpy(buf, opts->id, BUF_OFFSET-1);
-    buf[BUF_OFFSET - 1] = '\0';
 
     while (1) {
 
         idx = 0;
 
-        if ((rcount = read(tap, obuf, MTU)) < 0) {
+        if ((rcount = read(tap, obuf, BUFLEN)) < 0) {
             fprintf(stderr, "tap read failed\n");
-            pthread_exit(NULL);
+            break;
         }
 
         printf("read from tap %d\n", rcount);
@@ -85,16 +86,17 @@ udp_send_thread(void *data)
         }
         else {
 
+            rcount += BUF_OFFSET;
             while (get_dest_addr(&dest, obuf + 30, &idx, 1, obuf) >= 0) {
 
-                if (sendto(sock, buf, rcount + BUF_OFFSET, 0, 
-                           (struct sockaddr*) &dest, addrlen) < 0) {
-                    fprintf(stderr, "sendto failed %x\n", 
-                            (unsigned int) dest.sin_addr.s_addr);
+                memcpy(buf, opts->id, ID_SIZE);
+
+                if (sendto(sock, buf, rcount, 0, (struct sockaddr*) &dest, 
+                    addrlen) < 0) {
+                    fprintf(stderr, "sendto failed\n");
                 }
 
-                printf("sent to udp %x %d\n", *(unsigned int*) obuf+30, 
-                        rcount);
+                printf("sent to udp %x %d\n", *(unsigned int*) obuf+30, rcount);
 
                 if (idx++ == -1) {
                     break;
@@ -102,6 +104,9 @@ udp_send_thread(void *data)
             }
         }
     }
+
+    close(sock);
+    close(tap);
     pthread_exit(NULL);
 }
 
@@ -118,47 +123,64 @@ udp_recv_thread(void *data)
     char buf[BUFLEN];
     char *obuf = buf + BUF_OFFSET;
     char source[4];
-    char dest[] = { 172, 31, 0, 2 };
+    char dest[4];
 
     while (1) {
 
-        if ((rcount = recvfrom(sock, buf, MTU, 0, (struct sockaddr*) &addr, 
+        if ((rcount = recvfrom(sock, buf, BUFLEN, 0, (struct sockaddr*) &addr, 
                                &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
-            pthread_exit(NULL);
+            break;
         }
 
         printf("recv from udp %d\n", rcount);
-        printf("from %s\n", buf); 
 
-        if (get_source_addr(buf, obuf + 30, source) < 0) {
+        if (get_source_addr(buf, obuf + 30, source, dest) < 0) {
             fprintf(stderr, "ip not found\n");
             continue;
         }
 
-        if (translate_headers(obuf, source, dest, opts->mac, 
-            rcount - BUF_OFFSET) < 0) {
+        rcount -= BUF_OFFSET;
+
+        if (translate_headers(obuf, source, dest, opts->mac, rcount) < 0) {
             fprintf(stderr, "translate error\n");
-            pthread_exit(NULL);
+            continue;
         }
 
         if (write(tap, obuf, rcount) < 0) {
             fprintf(stderr, "write to tap error\n");
-            close(tap);
-            pthread_exit(NULL);
+            break;
         }
         printf("wrote to tap %d\n", rcount);
     }
+
+    close(tap);
+    close(sock);
     pthread_exit(NULL);
+}
+
+static int
+process_inputs(thread_opts_t *opts, char *inputs[])
+{
+    if (strcmp(inputs[0], "setid") == 0) {
+        strncpy(opts->id, inputs[1], ID_SIZE);
+        printf("id = %s\n", opts->id);
+    }
+    else if (strcmp(inputs[0], "add") == 0) {
+        add_route(inputs[1], inputs[2], atoi(inputs[3]));
+    }
+    return 0;
 }
 
 int
 main(int argc, char *argv[])
 {
     thread_opts_t opts;
-    opts.id = argv[2];
-    opts.sock = create_udp_socket(atoi(argv[1]));
-    opts.tap = open_tap("svpn0", "172.31.0.2", opts.mac, MTU);
+    opts.sock = create_udp_socket(5800);
+    opts.tap = open_tap("svpn0", opts.mac);
+    strncpy(opts.s_ip, "172.31.0.2", 16);
+    configure_tap(opts.tap, opts.s_ip, MTU);
+    set_local_ip(opts.s_ip);
 
     // drop root priviledges and set to nobody
     struct passwd * pwd = getpwnam("nobody");
@@ -181,27 +203,30 @@ main(int argc, char *argv[])
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
 
-    char buf[16] = { '0' };
-    char *line = buf;
-    size_t len = sizeof(buf);
-
-    char id[12] = { '\0' };
-    char local_ip[16] = { '\0' };
-    char dest_ip[16] = { '\0' };
-    unsigned short port;
-    ssize_t ret;
+    char buf[50] = { '0' };
+    char * inputs[5];
+    int i, j;
 
     while (1) {
-        ret = getdelim(&line, &len, ' ',stdin);
-        strncpy(id, line, ret-1);
-        ret = getdelim(&line, &len, ' ',stdin);
-        strncpy(local_ip, line, ret-1);
-        ret = getdelim(&line, &len, ' ',stdin);
-        strncpy(dest_ip, line,  ret-1);
-        ret = getline(&line, &len,stdin);
-        port = atoi(line);
+        fgets(buf, sizeof(buf), stdin);
+        printf("fgets %s", buf);
 
-        add_route(id, local_ip, dest_ip, port);
+        // trim newline
+        buf[strlen(buf)-1] = ' ';
+
+        i = j = 0;
+        inputs[j++] = buf + i;
+
+        while (buf[i] != '\0' && i < sizeof(buf)) {
+            if (buf[i] == ' ') {
+                buf[i] = '\0';
+                inputs[j++] = buf + i + 1;
+
+                if (j == 5) break;
+            }
+            i++;
+        }
+        process_inputs(&opts, inputs);
     }
 }
 
