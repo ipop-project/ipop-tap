@@ -1,6 +1,18 @@
 
 #include <string.h>
 #include <arpa/inet.h>
+#include <stdio.h>
+
+#define TABLE_SIZE 10
+
+struct upnp_state {
+    uint16_t c_port;
+    int s_count;
+    int s_ports[TABLE_SIZE];
+    char server_ips[TABLE_SIZE][4];
+};
+
+struct upnp_state ustate = { 0, 0, { 0 }};
 
 int
 create_arp_response(char *buf)
@@ -70,6 +82,61 @@ update_checksum(unsigned char *buf, const int start, const int idx, ssize_t len)
     return 0;
 }
 
+static int
+is_upnp_endpoint(const char *source, uint16_t s_port)
+{
+    int i;
+    for (i = 0; i < ustate.s_count; i++) {
+        if (ustate.s_ports[i] == s_port && 
+            memcmp(source, ustate.server_ips[i], 4) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int
+update_upnp(unsigned char *buf, const char *source, const char *dest,
+    ssize_t len)
+{
+    char tmp[20] = {'\0'};
+    int i, idx, found = 0;
+    uint16_t d_port = (buf[36] << 8 & 0xFF00) + (buf[37] & 0xFF);
+    uint16_t s_port = (buf[34] << 8 & 0xFF00) + (buf[35] & 0xFF);
+
+    if (source == NULL && buf[23] == 0x11 && d_port == 1900) {
+        ustate.c_port = s_port;
+    }
+    else if (source != NULL && buf[23] == 0x11 && ustate.c_port == d_port) {
+
+        i = 42;
+        while (i < len) {
+            if (strncmp("http://172.", buf + i, 11) == 0) {
+                idx = ustate.s_count++;
+                memcpy(tmp, buf + i + 7, 12);
+                inet_aton(tmp, (struct in_addr *)ustate.server_ips[idx]);
+                ustate.s_ports[idx] = atoi(buf + i + 20);
+                sprintf(buf + i + 16, "%d", source[3]);
+                buf[i + 19] = ':';
+                break;
+            }
+            i++;
+        }
+    }
+    else if (source != NULL && buf[23] == 0x06 && 
+        is_upnp_endpoint(buf + 26, s_port)) {
+        i = 66;
+        while (i < len) {
+            if (strncmp("http://172.", buf + i, 11) == 0) {
+                sprintf(buf + i + 16, "%d", source[3]);
+                buf[i + 19] = ':';
+            }
+            i++;
+        }
+    }
+    return 0;
+}
+
 int
 translate_headers(char *buf, const char *source, const char *dest, 
     const char *mac, ssize_t len)
@@ -90,7 +157,7 @@ translate_headers(char *buf, const char *source, const char *dest,
     if (buf[23] == 0x06) {
         update_checksum(buf, 34, 50, len);
     }
-    else if (buf[23] == 0x11) {
+    else if (buf[23] == 0x11 && buf[21] == 0 && !(buf[20] & 0x01)) {
         // checksum disabled for UDP
         buf[40] = 0x00;
         buf[41] = 0x00;
@@ -98,3 +165,9 @@ translate_headers(char *buf, const char *source, const char *dest,
     return 0;
 }
 
+int
+translate_packet(char *buf, const char *source, const char *dest, ssize_t len)
+{
+    update_upnp(buf, source, dest, len);
+    return 0;
+}

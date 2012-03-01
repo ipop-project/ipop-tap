@@ -35,7 +35,7 @@ void set_local_ip(const char *local_ip)
     _local_ip = inet_addr(local_ip);
     _base_ip = _local_ip;
     unsigned char *ip = (unsigned char *)&_base_ip;
-    ip[3] = 100;
+    ip[3] = 101;
     clear_table();
 }
 
@@ -127,11 +127,6 @@ get_source_addr(const char *id, const char *dest_ip, char *source, char *dest)
 {
     if (dest != NULL) {
         memcpy(dest, &_local_ip, 4);
-    }
-
-    if ((unsigned char) dest_ip[0] >= 224 &&
-        (unsigned char) dest_ip[0] <= 239) {
-        return 0;
     }
 
     int i;

@@ -90,6 +90,7 @@ udp_send_thread(void *data)
             while (get_dest_addr(&dest, obuf + 30, &idx, 1, obuf) >= 0) {
 
                 memcpy(buf, opts->id, ID_SIZE);
+                translate_packet(obuf, NULL, NULL, rcount - BUF_OFFSET);
 
                 if (sendto(sock, buf, rcount, 0, (struct sockaddr*) &dest, 
                     addrlen) < 0) {
@@ -141,6 +142,7 @@ udp_recv_thread(void *data)
         }
 
         rcount -= BUF_OFFSET;
+        translate_packet(obuf, source, dest, rcount);
 
         if (translate_headers(obuf, source, dest, opts->mac, rcount) < 0) {
             fprintf(stderr, "translate error\n");
@@ -178,7 +180,7 @@ main(int argc, char *argv[])
     thread_opts_t opts;
     opts.sock = create_udp_socket(5800);
     opts.tap = open_tap("svpn0", opts.mac);
-    strncpy(opts.s_ip, "172.31.0.2", 16);
+    strncpy(opts.s_ip, "172.31.0.100", 16);
     configure_tap(opts.tap, opts.s_ip, MTU);
     set_local_ip(opts.s_ip);
 
