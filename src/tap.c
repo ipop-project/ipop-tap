@@ -9,6 +9,7 @@
 #include <linux/if.h>
 #include <linux/if_tun.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 #include <tap.h>
 

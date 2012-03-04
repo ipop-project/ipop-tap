@@ -1,5 +1,6 @@
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -10,20 +11,17 @@
 #include <pwd.h>
 
 #include <translator.h>
-#include <router.h>
+#include <peerlist.h>
 #include <tap.h>
-
-#define MTU 1200
-#define BUF_OFFSET 12
-#define BUFLEN 2048
-#define ID_SIZE 12
+#include <encryption.h>
+#include <headers.h>
+#include <svpn.h>
 
 typedef struct thread_opts {
     int sock;
     int tap;
     char mac[6];
-    char id[ID_SIZE];
-    char s_ip[16];
+    char *local_ip;
 } thread_opts_t;
 
 static int
@@ -60,48 +58,52 @@ udp_send_thread(void *data)
     int sock = opts->sock;
     int tap = opts->tap;
 
-    ssize_t rcount;
-    struct sockaddr_in dest;
-    socklen_t addrlen = sizeof(dest);
-    char buf[BUFLEN];
-    char *obuf = buf + BUF_OFFSET;
-    int idx;
+    int rcount;
+    struct sockaddr_in addr;
+    socklen_t addrlen = sizeof(addr);
 
+    unsigned char buf[BUFLEN];
+    unsigned char enc_buf[BUFLEN];
+    unsigned char key[KEY_SIZE] = { 0 };
+    unsigned char iv[KEY_SIZE] = { 0 };
+    char source_id[ID_SIZE] = { 0 };
+    char dest_id[ID_SIZE] = { 0 };
+    int idx;
 
     while (1) {
 
         idx = 0;
-
-        if ((rcount = read(tap, obuf, BUFLEN)) < 0) {
+        if ((rcount = read(tap, buf, BUFLEN)) < 0) {
             fprintf(stderr, "tap read failed\n");
             break;
         }
 
-        printf("read from tap %d\n", rcount);
+        printf("T >> %d %x %x\n", rcount, buf[32], buf[33]);
 
-        if (obuf[12] == 0x08 && obuf[13] == 0x06) {
-            if (create_arp_response(obuf) == 0) {
-                write(tap, obuf, rcount);
-            }
+        if (buf[12] == 0x08 && buf[13] == 0x06 && create_arp_response(buf)) {
+            write(tap, buf, rcount);
+            continue;
         }
-        else {
+
+        while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr, 
+            (char *)key, &idx) >= 0) {
+
+            translate_packet(buf, NULL, NULL, rcount);
+
+            set_headers(enc_buf, source_id, dest_id, iv);
+            rcount = aes_encrypt(buf, enc_buf + BUF_OFFSET, key, iv,
+                rcount);
 
             rcount += BUF_OFFSET;
-            while (get_dest_addr(&dest, obuf + 30, &idx, 1, obuf) >= 0) {
 
-                memcpy(buf, opts->id, ID_SIZE);
-
-                if (sendto(sock, buf, rcount, 0, (struct sockaddr*) &dest, 
-                    addrlen) < 0) {
-                    fprintf(stderr, "sendto failed\n");
-                }
-
-                printf("sent to udp %x %d\n", *(unsigned int*) obuf+30, rcount);
-
-                if (idx++ == -1) {
-                    break;
-                }
+            if (sendto(sock, enc_buf, rcount, 0, (struct sockaddr*) &addr, 
+                addrlen) < 0) {
+                fprintf(stderr, "sendto failed\n");
             }
+
+            printf("S >> %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
+
+            if (idx++ == -1) break;
         }
     }
 
@@ -117,41 +119,52 @@ udp_recv_thread(void *data)
     int sock = opts->sock;
     int tap = opts->tap;
 
-    ssize_t rcount;
+    int rcount;
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
-    char buf[BUFLEN];
-    char *obuf = buf + BUF_OFFSET;
+
+    unsigned char buf[BUFLEN];
+    unsigned char dec_buf[BUFLEN];
+    unsigned char key[KEY_SIZE] = { 0 };
+    unsigned char iv[KEY_SIZE] = { 0 };
+    char source_id[KEY_SIZE] = { 0 };
+    char dest_id[KEY_SIZE] = { 0 };
     char source[4];
     char dest[4];
 
     while (1) {
 
-        if ((rcount = recvfrom(sock, buf, BUFLEN, 0, (struct sockaddr*) &addr, 
-                               &addrlen)) < 0) {
+        if ((rcount = recvfrom(sock, dec_buf, BUFLEN, 0, 
+               (struct sockaddr*) &addr, &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
             break;
         }
 
-        printf("recv from udp %d\n", rcount);
+        printf("S << %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
 
-        if (get_source_addr(buf, obuf + 30, source, dest) < 0) {
-            fprintf(stderr, "ip not found\n");
+        get_headers(dec_buf, source_id, dest_id, iv);
+
+        if (get_source_info(source_id, source, dest, (char *)key) < 0) {
+            fprintf(stderr, "info not found\n");
             continue;
         }
 
         rcount -= BUF_OFFSET;
+        rcount = aes_decrypt(dec_buf + BUF_OFFSET, buf, key, iv, rcount);
 
-        if (translate_headers(obuf, source, dest, opts->mac, rcount) < 0) {
+        translate_packet(buf, source, dest, rcount);
+
+        if (translate_headers(buf, source, dest, opts->mac, rcount) < 0) {
             fprintf(stderr, "translate error\n");
             continue;
         }
 
-        if (write(tap, obuf, rcount) < 0) {
+        if (write(tap, buf, rcount) < 0) {
             fprintf(stderr, "write to tap error\n");
             break;
         }
-        printf("wrote to tap %d\n", rcount);
+        printf("T << %d %x %x\n", rcount, buf[32], buf[33]);
+
     }
 
     close(tap);
@@ -162,12 +175,20 @@ udp_recv_thread(void *data)
 static int
 process_inputs(thread_opts_t *opts, char *inputs[])
 {
+    char source[4];
+    char dest[4];
+    char key[KEY_SIZE];
+    char id[ID_SIZE] = { 0 };
+
     if (strcmp(inputs[0], "setid") == 0) {
-        strncpy(opts->id, inputs[1], ID_SIZE);
-        printf("id = %s\n", opts->id);
+        set_local_peer(inputs[1], opts->local_ip);
+        printf("id = %s ip = %s\n", inputs[1], opts->local_ip);
     }
     else if (strcmp(inputs[0], "add") == 0) {
-        add_route(inputs[1], inputs[2], atoi(inputs[3]));
+        add_peer(inputs[1], inputs[2], atoi(inputs[3]), inputs[4]);
+        strncpy(id, inputs[1], ID_SIZE);
+        get_source_info(id, source, dest, key);
+        printf("id = %s ip = %s\n", id, inet_ntoa(*(struct in_addr*)source));
     }
     return 0;
 }
@@ -175,12 +196,13 @@ process_inputs(thread_opts_t *opts, char *inputs[])
 int
 main(int argc, char *argv[])
 {
+    char ip[] = "172.31.0.100";
     thread_opts_t opts;
     opts.sock = create_udp_socket(5800);
     opts.tap = open_tap("svpn0", opts.mac);
-    strncpy(opts.s_ip, "172.31.0.2", 16);
-    configure_tap(opts.tap, opts.s_ip, MTU);
-    set_local_ip(opts.s_ip);
+    opts.local_ip = ip;
+    configure_tap(opts.tap, ip, MTU);
+    set_local_peer("nobody", ip);
 
     // drop root priviledges and set to nobody
     struct passwd * pwd = getpwnam("nobody");

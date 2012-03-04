@@ -1,6 +1,7 @@
 
 #include <stdio.h>
-#include <router.h>
+#include <string.h>
+#include <peerlist.h>
 
 #include <minunit.h>
 
@@ -20,48 +21,53 @@ static char *test_int(int first, int second)
 
 int main()
 {
-    set_local_ip("172.31.0.2");
+    set_local_peer("alice", "172.31.0.2");
 
-    char id[] = "aliceid";
+    char id[20] = { 0 };
+    strcpy(id, "aliceid");
     char dest_ip[] = "192.168.5.2";
     uint16_t port = atoi("5800");
+    char key[32];
 
     int ret;
-    ret = add_route(id, dest_ip, port);
+    ret = add_peer(id, dest_ip, port, key);
 
-    char new_id[] = "bobid";
+    char new_id[20] = { 0 };
+    strcpy(new_id, "bobid");
     char new_dip[] = "192.168.5.3";
-    ret = add_route(new_id, new_dip, port);
+    char new_key[32];
+    ret = add_peer(new_id, new_dip, port, new_key);
 
     struct sockaddr_in addr;
     int idx = 0;
-    char dest_id[12];
+    char dest_id[20];
+    char source_id[20];
 
-    char ip1[] = { 172, 31, 0, 100 };
-    ret = get_dest_addr(&addr, ip1, &idx, 1, dest_id); 
+    char ip1[] = { 172, 31, 0, 101 };
+    ret = get_dest_info(ip1, source_id, dest_id, &addr, key, &idx); 
     printf("%s\n", test_int(ret, 0));
     printf("%s\n", test_int(idx, -1));
     printf("%s\n", test_string(dest_id, "aliceid"));
 
-    char ip2[] = { 172, 31, 0, 101};
-    ret = get_dest_addr(&addr, ip2, &idx, 1, dest_id);
+    char ip2[] = { 172, 31, 0, 102};
+    ret = get_dest_info(ip2, source_id, dest_id, &addr, key, &idx);
     printf("%s\n", test_int(ret, 0));
     printf("%s\n", test_int(idx, -1));
     printf("%s\n", test_string(dest_id, "bobid"));
 
     char ip3[] = {224, 0, 0, 1};
     idx = 0;
-    ret = get_dest_addr(&addr, ip3, &idx, 1, dest_id);
+    ret = get_dest_info(ip3, source_id, dest_id, &addr, key, &idx);
     printf("%s\n", test_int(ret, 0));
     printf("%s\n", test_int(idx++, 1));
     printf("%s\n", test_string(dest_id, "aliceid"));
 
-    ret = get_dest_addr(&addr, ip3, &idx, 1, dest_id);
+    ret = get_dest_info(ip3, source_id, dest_id, &addr, key, &idx);
     printf("%s\n", test_int(ret, 0));
     printf("%s\n", test_int(idx++, 1));
     printf("%s\n", test_string(dest_id, "bobid"));
  
-    ret = get_dest_addr(&addr, ip3, &idx, 1, dest_id);
+    ret = get_dest_info(ip3, source_id, dest_id, &addr, key, &idx);
     printf("%s\n", test_int(ret, -1));
     printf("%s\n", test_int(idx++, -1));
  

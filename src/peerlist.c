@@ -5,49 +5,61 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include <router.h>
-
-#define TABLE_SIZE 10
-#define ID_SIZE 12
+#include <peerlist.h>
+#include <svpn.h>
 
 typedef struct peers_state {
     char id[ID_SIZE];
     in_addr_t local_ip;
     in_addr_t dest_ip;
     uint16_t port;
+    char key[KEY_SIZE];
 } peer_state_t;
 
 static peer_state_t table[TABLE_SIZE];
-in_addr_t _base_ip;
-in_addr_t _local_ip;
+static in_addr_t _base_ip;
+static in_addr_t _local_ip;
+static char _local_id[ID_SIZE];
 
 static void
 clear_table(void)
 {
     int i;
     for (i = 0; i < TABLE_SIZE; i++) {
-        table[i].id[0] = 0;
+        memset(table[i].id, 0, ID_SIZE);
+        memset(table[i].key, 0, KEY_SIZE);
     }
 }
 
-void set_local_ip(const char *local_ip)
+void set_local_peer(const char *local_id, const char *local_ip)
 {
+    memset(_local_id, 0, ID_SIZE);
+    strncpy(_local_id, local_id, ID_SIZE);
     _local_ip = inet_addr(local_ip);
     _base_ip = _local_ip;
     unsigned char *ip = (unsigned char *)&_base_ip;
-    ip[3] = 100;
+    ip[3] = 101;
     clear_table();
 }
 
 int
-add_route(const char *id, const char *dest_ip, const uint16_t port)
+add_peer(const char *id, const char *dest_ip, const uint16_t port, 
+    const char *key)
 {
+    // TODO - this is a hack, hash func should be used here
+    // this is done because we are takin string input from user
+    char tmp_id[ID_SIZE] = { 0 };
+    char tmp_key[KEY_SIZE] = { 0 };
+
+    strncpy(tmp_id, id, ID_SIZE);
+    strncpy(tmp_key, key, KEY_SIZE);
 
     int i;
     for (i = 0; i < TABLE_SIZE; i++) {
 
         if (table[i].id[0] != 0) {
-            if (strncmp(id, table[i].id, ID_SIZE) == 0) {
+            if (memcmp(tmp_id, table[i].id, ID_SIZE) == 0) {
+                memcpy(table[i].key, tmp_key, KEY_SIZE);
                 table[i].dest_ip = inet_addr(dest_ip);
                 table[i].port = port;
                 return 0;
@@ -57,9 +69,9 @@ add_route(const char *id, const char *dest_ip, const uint16_t port)
             }
         }
 
-        printf("adding %s %x %s %d\n", id, _base_ip, dest_ip, port);
+        memcpy(table[i].id, tmp_id, ID_SIZE);
+        memcpy(table[i].key, tmp_key, KEY_SIZE);
 
-        strncpy(table[i].id, id, ID_SIZE);
         table[i].local_ip = _base_ip;
         table[i].dest_ip = inet_addr(dest_ip);
         table[i].port = port;
@@ -71,9 +83,11 @@ add_route(const char *id, const char *dest_ip, const uint16_t port)
 }
 
 int
-get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx, 
-    const int flags, char *dest_id)
+get_dest_info(const char *local_ip, char *source_id, char *dest_id, 
+    struct sockaddr_in *addr, char *key, int *idx)
 {
+    memcpy(source_id, _local_id, ID_SIZE);
+
     if ((unsigned char) local_ip[0] >= 224 &&
         (unsigned char) local_ip[0] <= 239) {
 
@@ -88,10 +102,8 @@ get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx,
             addr->sin_port = htons(table[*idx].port);
             addr->sin_addr.s_addr = table[*idx].dest_ip;
 
-            if (flags == 1) {
-                memcpy(dest_id, table[*idx].id, ID_SIZE);
-            }
-
+            memcpy(dest_id, table[*idx].id, ID_SIZE);
+            memcpy(key, table[*idx].key, ID_SIZE);
             return 0;
         }
     }
@@ -110,29 +122,19 @@ get_dest_addr(struct sockaddr_in *addr, const char *local_ip, int *idx,
             addr->sin_port = htons(table[i].port);
             addr->sin_addr.s_addr = table[i].dest_ip;
 
-            if (flags == 1) {
-                memcpy(dest_id, table[i].id, ID_SIZE);
-            }
-
+            memcpy(dest_id, table[i].id, ID_SIZE);
+            memcpy(key, table[i].key, KEY_SIZE);
             *idx = -1;
             return 0;
         }
     }
-
     return -1;
 }
 
 int
-get_source_addr(const char *id, const char *dest_ip, char *source, char *dest)
+get_source_info(const char *id, char *source, char *dest, char *key)
 {
-    if (dest != NULL) {
-        memcpy(dest, &_local_ip, 4);
-    }
-
-    if ((unsigned char) dest_ip[0] >= 224 &&
-        (unsigned char) dest_ip[0] <= 239) {
-        return 0;
-    }
+    memcpy(dest, &_local_ip, 4);
 
     int i;
     for (i = 0; i < TABLE_SIZE; i++) {
@@ -141,12 +143,12 @@ get_source_addr(const char *id, const char *dest_ip, char *source, char *dest)
             continue;
         }
 
-        if (strncmp(id, table[i].id, ID_SIZE) == 0) {
+        if (memcmp(id, table[i].id, ID_SIZE) == 0) {
             memcpy(source, &table[i].local_ip, 4);
+            memcpy(key, table[i].key, KEY_SIZE);
             return 0;
         }
     }
-
     return -1;
 }
 
