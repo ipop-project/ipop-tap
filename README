@@ -1,1 +1,55 @@
-virtual networking for friends
+
+SocialVPN - P2P VPN for Friends
+
+How to compile
+--------------
+
+For Linux:
+
+Make sure you have OpenSSL installed
+
+aptitude install libssl-dev openssl
+
+cd src
+gcc -Wall -o svpn tap.c translator.c peerlist.c headers.c encryption.c svpn.c -I. -lpthread -lcrypto
+
+For Android:
+
+Download OpenSSL for Android https://github.com/eighthave/openssl-android
+
+Download the Android NDK
+
+Build OpenSSL for Android
+
+Update the Android.mk file under svpn/android/jni to the correct path of your OpenSSL library
+
+cd svpn/android/jni
+
+NDK-path/ndk-build
+
+
+How to run
+----------
+
+Run as root, process drops priviledges to nobody after configuring tap device
+
+sudo ./svpn
+
+First you have to set a unique id
+
+setid alice
+
+Now you can add a friend with the following format
+
+add <friend id> <friend ip> <friend port> <shared symmetric key>
+
+for example:
+
+add bob 192.168.0.101 5800 sharekey1234
+
+
+How to configure
+----------------
+
+If you want to configure port number or tap IP address, you have to modify svpn.c main function.
+
