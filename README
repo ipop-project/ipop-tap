@@ -53,3 +53,9 @@ How to configure
 
 If you want to configure port number or tap IP address, you have to modify svpn.c main function.
 
+Warning
+-------
+
+At the moment this is simply a conceptual prototype, the encryption is really insecure, and
+does not defend against many types of attacks (i.e. replay). A smarter solution will be to
+use TLS or DTLS from OpenSSL, but that's for a future date.
