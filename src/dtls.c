@@ -104,14 +104,13 @@ init_peer(int type, peer_t *peer)
     timeout.tv_usec = 250000;
     timeout.tv_sec = 0;
 
+    //BIO_ctrl(peer->inbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
+    SSL_set_bio(peer->ssl, peer->inbio, peer->dbio);
+
     if (type == CLIENT) {
-        BIO_ctrl(peer->dbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
-        SSL_set_bio(peer->ssl, peer->dbio, peer->dbio);
         SSL_set_connect_state(peer->ssl);
     }
     else {
-        BIO_ctrl(peer->inbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
-        SSL_set_bio(peer->ssl, peer->inbio, peer->dbio);
         SSL_set_accept_state(peer->ssl);
     }
 
@@ -121,10 +120,22 @@ init_peer(int type, peer_t *peer)
 }
 
 int
+init_dtls(thread_opts_t *opts)
+{
+    ERR_load_crypto_strings();
+    ERR_load_SSL_strings();
+    SSL_library_init();
+
+    _peer.sock = opts->sock;
+    //_peer.sock = create_udp_socket(51234);
+    init_peer(CLIENT, &_peer);
+    return 0;
+}
+
+int
 start_dtls_client(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
-    int sock = create_udp_socket(51234);
     int tap = opts->tap;
 
     int rcount;
@@ -140,13 +151,6 @@ start_dtls_client(void *data)
     char source[4];
     char dest[4];
 
-    ERR_load_crypto_strings();
-    ERR_load_SSL_strings();
-    SSL_library_init();
-
-    _peer.sock = sock;
-    init_peer(CLIENT, &_peer);
-
     memset(&addr, 0, addr_len);
     addr.sin_family = AF_INET;
     addr.sin_port = htons(opts->dtls_port);
@@ -160,6 +164,8 @@ start_dtls_client(void *data)
             fprintf(stderr, "SSL_read failed\n");
             return -1;
         }
+
+        printf("%d %s\n", rcount, dec_buf);
 
         get_headers(dec_buf, source_id, dest_id, iv);
 

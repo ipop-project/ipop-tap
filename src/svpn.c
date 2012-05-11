@@ -200,6 +200,7 @@ main(int argc, char *argv[])
     opts.tap = open_tap("svpn0", opts.mac);
     opts.local_ip = ip;
     opts.dtls = 0;
+    init_dtls(&opts);
     configure_tap(opts.tap, ip, MTU);
     set_local_peer("nobody", ip);
 

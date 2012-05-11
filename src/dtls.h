@@ -4,6 +4,8 @@
 
 int create_udp_socket(uint16_t port);
 
+int init_dtls(thread_opts_t *opts);
+
 int start_dtls_client(void *data);
 
 int svpn_dtls_send(const unsigned char *buf, int len);
