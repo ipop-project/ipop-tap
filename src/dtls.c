@@ -127,7 +127,6 @@ init_dtls(thread_opts_t *opts)
     SSL_library_init();
 
     _peer.sock = opts->sock;
-    //_peer.sock = create_udp_socket(51234);
     init_peer(CLIENT, &_peer);
     return 0;
 }
