@@ -205,6 +205,7 @@ main(int argc, char *argv[])
     set_local_peer("nobody", ip);
 
     // drop root priviledges and set to nobody
+    // I need to add chroot jail in here later
     struct passwd * pwd = getpwnam("nobody");
     if (getuid() == 0) {
         if (setgid(pwd->pw_uid) < 0) {
