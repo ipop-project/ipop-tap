@@ -9,5 +9,15 @@
 #define KEY_SIZE 32
 #define TABLE_SIZE 10
 
+typedef struct thread_opts {
+    int sock;
+    int tap;
+    char mac[6];
+    char *local_ip;
+    char dtls_ip[16];
+    int dtls_port;
+    int dtls;
+} thread_opts_t;
+
 #endif
 

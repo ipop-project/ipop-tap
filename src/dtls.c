@@ -1,17 +1,17 @@
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
-#include <pthread.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
+
+#include <translator.h>
+#include <peerlist.h>
+#include <headers.h>
+#include <svpn.h>
+#include <dtls.h>
 
 #include "bss_fifo.h"
 
@@ -25,7 +25,9 @@ typedef struct peer {
     int sock;
 } peer_t;
 
-static int
+static peer_t _peer;
+
+int
 create_udp_socket(uint16_t port)
 {
     int sock, optval = 1;
@@ -96,7 +98,7 @@ init_peer(int type, peer_t *peer)
 
     peer->ssl = SSL_new(peer->ctx);
     peer->dbio = BIO_new_dgram(peer->sock, BIO_NOCLOSE);
-    peer->inbio = BIO_new_fifo(20, 1400);
+    peer->inbio = BIO_new_fifo(20, 1700);
 
     struct timeval timeout;
     timeout.tv_usec = 250000;
@@ -114,99 +116,85 @@ init_peer(int type, peer_t *peer)
     }
 
     SSL_set_options(peer->ssl, SSL_OP_NO_QUERY_MTU);
-    peer->ssl->d1->mtu = 1200;
-    return 0;
-}
-
-static int
-start_client()
-{
-    printf("starting client\n");
-
-    char buf[2048];
-    peer_t peer;
-
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    peer.sock = create_udp_socket(51234);
-    init_peer(CLIENT, &peer);
-
-    memset(&addr, 0, addr_len);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(12345);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    BIO_ctrl(peer.dbio, BIO_CTRL_DGRAM_SET_PEER, 0, &addr);
-    SSL_do_handshake(peer.ssl);
-
-    SSL_write(peer.ssl, "hello client", 13);
-    SSL_read(peer.ssl, buf, sizeof(buf));
-    printf("%s\n", buf);
-
-    return 0;
-}
-
-static void *
-server_thread(void *data)
-{
-    peer_t *peer = (peer_t *) data;
-    int count = 0;
-    char buf[2048];
-    struct sockaddr_in addr;
-    socklen_t addrlen;
-
-    while (1) {
-        count = recvfrom(peer->sock, buf, sizeof(buf), 0,
-            (struct sockaddr *) &addr, &addrlen);
-        BIO_ctrl(peer->dbio, BIO_CTRL_DGRAM_SET_PEER, 0, &addr);
-        BIO_write(peer->inbio, buf, count);
-    }
-    return data;
-}
-
-static int
-start_server()
-{
-    printf("starting server\n");
-
-    int r = 0;
-    char buf[2048];
-    peer_t peer;
-
-    peer.sock = create_udp_socket(12345);
-    init_peer(SERVER, &peer);
-
-    pthread_t s_thread;
-    pthread_create(&s_thread, NULL, server_thread, &peer);
-
-    while (r != 1) {
-        r = SSL_do_handshake(peer.ssl);
-        printf("waiting %d\n", r);
-        sleep(1);
-    }
-
-    SSL_read(peer.ssl, buf, sizeof(buf));
-    printf("%s\n", buf);
-    SSL_write(peer.ssl, "hello server", 13);
-
+    peer->ssl->d1->mtu = 1500;
     return 0;
 }
 
 int
-main(int argc, char *argv[])
+start_dtls_client(void *data)
 {
+    thread_opts_t *opts = (thread_opts_t *) data;
+    int sock = create_udp_socket(51234);
+    int tap = opts->tap;
+
+    int rcount;
+    struct sockaddr_in addr;
+    socklen_t addr_len = sizeof(addr);
+
+    unsigned char buf[BUFLEN];
+    unsigned char dec_buf[BUFLEN];
+    unsigned char key[KEY_SIZE] = { 0 };
+    unsigned char iv[KEY_SIZE] = { 0 };
+    char source_id[KEY_SIZE] = { 0 };
+    char dest_id[KEY_SIZE] = { 0 };
+    char source[4];
+    char dest[4];
+
     ERR_load_crypto_strings();
     ERR_load_SSL_strings();
     SSL_library_init();
 
-    if (argv[1][0] == 'c') {
-        start_client();
-    }
-    else {
-        start_server();
-    }
+    _peer.sock = sock;
+    init_peer(CLIENT, &_peer);
 
+    memset(&addr, 0, addr_len);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(opts->dtls_port);
+    addr.sin_addr.s_addr = inet_addr(opts->dtls_ip);
+
+    BIO_ctrl(_peer.dbio, BIO_CTRL_DGRAM_SET_PEER, 0, &addr);
+    SSL_do_handshake(_peer.ssl);
+
+    while (1) {
+        if ((rcount = SSL_read(_peer.ssl, dec_buf, BUFLEN)) < 0) {
+            fprintf(stderr, "SSL_read failed\n");
+            return -1;
+        }
+
+        get_headers(dec_buf, source_id, dest_id, iv);
+
+        if (get_source_info(source_id, source, dest, (char *)key)) {
+            fprintf(stderr, "dtls info not found\n");
+            continue;
+        }
+
+        rcount -= BUF_OFFSET;
+        memcpy(buf, dec_buf + BUF_OFFSET, rcount);
+        translate_packet(buf, source, dest, rcount);
+
+        if (translate_headers(buf, source, dest, opts->mac, rcount) < 0) {
+            fprintf(stderr, "dtls translate error\n");
+            continue;
+        }
+
+        if (write(tap, buf, rcount) < 0) {
+            fprintf(stderr, "dtls write to tap error\n");
+            break;
+        }
+        printf("T << %d %x %x\n", rcount, buf[32], buf[33]);
+    }
     return 0;
+}
+
+int
+svpn_dtls_send(const unsigned char *buf, int len)
+{
+    return SSL_write(_peer.ssl, buf, len);
+}
+
+int
+svpn_dtls_process(const unsigned char *buf, int len)
+{
+    return BIO_write(_peer.inbio, buf, len);
 }
 

@@ -16,40 +16,7 @@
 #include <encryption.h>
 #include <headers.h>
 #include <svpn.h>
-
-typedef struct thread_opts {
-    int sock;
-    int tap;
-    char mac[6];
-    char *local_ip;
-} thread_opts_t;
-
-static int
-create_udp_socket(uint16_t port)
-{
-    int sock, optval = 1;
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 1) {
-        fprintf(stderr, "socket failed\n");
-        return -1;
-    }
-
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-
-    memset(&addr, 0, addr_len);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
-        fprintf(stderr, "bind failed\n");
-        close(sock);
-        return -1;
-    }
-    return sock;
-}
+#include <dtls.h>
 
 static void *
 udp_send_thread(void *data)
@@ -91,6 +58,13 @@ udp_send_thread(void *data)
             translate_packet(buf, NULL, NULL, rcount);
 
             set_headers(enc_buf, source_id, dest_id, iv);
+
+            if (opts->dtls == 1) {
+                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
+                svpn_dtls_send(enc_buf, rcount + BUF_OFFSET);
+                continue;
+            }
+
             rcount = aes_encrypt(buf, enc_buf + BUF_OFFSET, key, iv,
                 rcount);
 
@@ -142,6 +116,11 @@ udp_recv_thread(void *data)
 
         printf("S << %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
 
+        if (opts->dtls == 1) {
+            svpn_dtls_process(dec_buf, rcount);
+            continue;
+        }
+
         get_headers(dec_buf, source_id, dest_id, iv);
 
         if (get_source_info(source_id, source, dest, (char *)key) < 0) {
@@ -172,8 +151,15 @@ udp_recv_thread(void *data)
     pthread_exit(NULL);
 }
 
+static void *
+dtls_recv_thread(void *data)
+{
+    start_dtls_client(data);
+    pthread_exit(NULL);
+}
+
 static int
-process_inputs(thread_opts_t *opts, char *inputs[])
+process_inputs(thread_opts_t *opts, char *inputs[], void *data)
 {
     char source[4];
     char dest[4];
@@ -190,6 +176,18 @@ process_inputs(thread_opts_t *opts, char *inputs[])
         get_source_info(id, source, dest, key);
         printf("id = %s ip = %s\n", id, inet_ntoa(*(struct in_addr*)source));
     }
+    else if (strcmp(inputs[0], "dtls") == 0) {
+        if (opts->dtls == 0) {
+            pthread_t *dtls_thread = (pthread_t *) data;
+            strncpy(opts->dtls_ip, inputs[1], 16);
+            opts->dtls_port = atoi(inputs[2]);
+            opts->dtls = 1;
+            pthread_create(dtls_thread, NULL, dtls_recv_thread, opts);
+        }
+        else {
+            fprintf(stderr, "dtls is already active\n");
+        }
+    }
     return 0;
 }
 
@@ -201,6 +199,7 @@ main(int argc, char *argv[])
     opts.sock = create_udp_socket(5800);
     opts.tap = open_tap("svpn0", opts.mac);
     opts.local_ip = ip;
+    opts.dtls = 0;
     configure_tap(opts.tap, ip, MTU);
     set_local_peer("nobody", ip);
 
@@ -221,7 +220,7 @@ main(int argc, char *argv[])
         }
     }
 
-    pthread_t send_thread, recv_thread;
+    pthread_t send_thread, recv_thread, dtls_thread;
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
 
@@ -248,7 +247,7 @@ main(int argc, char *argv[])
             }
             i++;
         }
-        process_inputs(&opts, inputs);
+        process_inputs(&opts, inputs, &dtls_thread);
     }
 }
 

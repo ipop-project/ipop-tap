@@ -3,6 +3,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 #define MAXBUF 1024
 
@@ -56,5 +58,6 @@ int main(int argc, char *argv[])
 {
     uint16_t port = atoi(argv[1]);
     udp_reflect(port);
+    return 0;
 }
 
