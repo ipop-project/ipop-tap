@@ -9,9 +9,7 @@ For Linux:
 Make sure you have OpenSSL installed
 
 aptitude install libssl-dev openssl
-
-cd src
-gcc -Wall -o svpn tap.c translator.c peerlist.c headers.c encryption.c svpn.c -I. -lpthread -lcrypto
+make
 
 For Android:
 
@@ -31,9 +29,14 @@ NDK-path/ndk-build
 How to run
 ----------
 
-Run as root, process drops priviledges to nobody after configuring tap device
+Run as root, process drops privileges to nobody after configuring tap device
 
+cd src
 sudo ./svpn
+
+or alternatively
+
+sudo make exec
 
 First you have to set a unique id
 
