@@ -229,8 +229,7 @@ main(int argc, char *argv[])
     char * inputs[5];
     int i, j;
 
-    while (1) {
-        fgets(buf, sizeof(buf), stdin);
+    while (fgets(buf, sizeof(buf), stdin) != NULL) {
         printf("fgets %s", buf);
 
         // trim newline
