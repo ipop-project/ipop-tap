@@ -55,7 +55,7 @@ create_udp_socket(uint16_t port)
 static int
 verify_callback(int ok, X509_STORE_CTX *ctx)
 {
-    printf("verify called\n");
+    fprintf(stderr, "verify called\n");
     return 1;
 }
 
@@ -102,14 +102,13 @@ init_peer(int type, peer_t *peer)
     timeout.tv_usec = 250000;
     timeout.tv_sec = 0;
 
+    //BIO_ctrl(peer->dbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
+    SSL_set_bio(peer->ssl, peer->dbio, peer->dbio);
+
     if (type == CLIENT) {
-        BIO_ctrl(peer->dbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
-        SSL_set_bio(peer->ssl, peer->dbio, peer->dbio);
         SSL_set_connect_state(peer->ssl);
     }
     else {
-        BIO_ctrl(peer->inbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
-        SSL_set_bio(peer->ssl, peer->inbio, peer->dbio);
         SSL_set_accept_state(peer->ssl);
     }
 
@@ -118,64 +117,33 @@ init_peer(int type, peer_t *peer)
     return 0;
 }
 
-static int
-start_client()
-{
-    printf("starting client\n");
-
-    char buf[2048];
-    peer_t peer;
-
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    peer.sock = create_udp_socket(51234);
-    init_peer(CLIENT, &peer);
-
-    memset(&addr, 0, addr_len);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(12345);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    BIO_ctrl(peer.dbio, BIO_CTRL_DGRAM_SET_PEER, 0, &addr);
-    SSL_do_handshake(peer.ssl);
-
-    char *line = NULL;
-    size_t len = 0;
-
-    while (1) {
-        getline(&line, &len, stdin);
-        SSL_write(peer.ssl, line, len);
-    }
-    //SSL_read(peer.ssl, buf, sizeof(buf));
-    printf("%s\n", buf);
-
-    return 0;
-}
-
 static void *
-server_thread(void *data)
+send_thread(void *data)
 {
     peer_t *peer = (peer_t *) data;
-    int count = 0;
+
     char buf[2048];
-    struct sockaddr_in addr;
-    socklen_t addrlen;
+    int r;
 
     while (1) {
-        count = recvfrom(peer->sock, buf, sizeof(buf), 0,
-            (struct sockaddr *) &addr, &addrlen);
-        BIO_ctrl(peer->dbio, BIO_CTRL_DGRAM_SET_PEER, 0, &addr);
-        BIO_write(peer->inbio, buf, count);
+        if ((r = read(0, buf, sizeof(buf))) < 0) {
+            fprintf(stderr, "read failed\n");
+            break;
+        }
+
+        fprintf(stderr, "%d %s\n", r, buf);
+
+        if ((r = SSL_write(peer->ssl, buf, r)) < 0) {
+            fprintf(stderr, "ssl write failed\n");
+            break;
+        }
     }
-    return data;
+    pthread_exit(NULL);
 }
 
-static int
+int
 start_server()
 {
-    printf("starting server\n");
-
     int r = 0;
     char buf[2048];
     peer_t peer;
@@ -183,20 +151,22 @@ start_server()
     peer.sock = create_udp_socket(12345);
     init_peer(SERVER, &peer);
 
+    SSL_do_handshake(peer.ssl);
+    
     pthread_t s_thread;
-    pthread_create(&s_thread, NULL, server_thread, &peer);
+    pthread_create(&s_thread, NULL, send_thread, &peer);
 
-    while (r != 1) {
-        r = SSL_do_handshake(peer.ssl);
-        printf("waiting %d\n", r);
-        sleep(1);
+    while (1) {
+        if ((r = SSL_read(peer.ssl, buf, sizeof(buf))) < 0) {
+            fprintf(stderr, "ssl read error\n");
+            exit(1);
+        }
+
+        if ((r = write(1, buf, r)) < 0) {
+            fprintf(stderr, "write failed\n");
+            exit(1);
+        }
     }
-
-    SSL_read(peer.ssl, buf, sizeof(buf));
-    //printf("%s\n", buf);
-    SSL_write(peer.ssl, "hello server", 13);
-
-    return 0;
 }
 
 int
@@ -206,13 +176,6 @@ main(int argc, char *argv[])
     ERR_load_SSL_strings();
     SSL_library_init();
 
-    if (argv[1][0] == 'c') {
-        start_client();
-    }
-    else {
-        start_server();
-    }
-
+    start_server();
     return 0;
 }
-

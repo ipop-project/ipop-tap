@@ -33,6 +33,7 @@ udp_send_thread(void *data)
     unsigned char enc_buf[BUFLEN];
     unsigned char key[KEY_SIZE] = { 0 };
     unsigned char iv[KEY_SIZE] = { 0 };
+    unsigned char p2p_addr[ADDR_SIZE] = { 0 };
     char source_id[ID_SIZE] = { 0 };
     char dest_id[ID_SIZE] = { 0 };
     int idx;
@@ -53,15 +54,17 @@ udp_send_thread(void *data)
         }
 
         while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr, 
-            (char *)key, &idx) >= 0) {
+            (char *)key, (char *)p2p_addr, &idx) >= 0) {
 
             translate_packet(buf, NULL, NULL, rcount);
 
             set_headers(enc_buf, source_id, dest_id, iv);
 
             if (opts->dtls == 1) {
+                set_headers(enc_buf, source_id, dest_id, p2p_addr);
                 memcpy(enc_buf + BUF_OFFSET, buf, rcount);
                 svpn_dtls_send(enc_buf, rcount + BUF_OFFSET);
+                if (idx++ == -1) break;
                 continue;
             }
 
@@ -171,10 +174,11 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
         printf("id = %s ip = %s\n", inputs[1], opts->local_ip);
     }
     else if (strcmp(inputs[0], "add") == 0) {
-        add_peer(inputs[1], inputs[2], atoi(inputs[3]), inputs[4]);
+        add_peer(inputs[1], inputs[2], atoi(inputs[3]), inputs[4], inputs[5]);
         strncpy(id, inputs[1], ID_SIZE);
         get_source_info(id, source, dest, key);
-        printf("id = %s ip = %s\n", id, inet_ntoa(*(struct in_addr*)source));
+        printf("id = %s ip = %s addr = %s\n", id, 
+            inet_ntoa(*(struct in_addr*)source), inputs[4]);
     }
     else if (strcmp(inputs[0], "dtls") == 0) {
         if (opts->dtls == 0) {
@@ -226,8 +230,8 @@ main(int argc, char *argv[])
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
 
-    char buf[50] = { '0' };
-    char * inputs[5];
+    char buf[100] = { '0' };
+    char * inputs[6];
     int i, j;
 
     while (1) {
@@ -245,7 +249,7 @@ main(int argc, char *argv[])
                 buf[i] = '\0';
                 inputs[j++] = buf + i + 1;
 
-                if (j == 5) break;
+                if (j == 6) break;
             }
             i++;
         }

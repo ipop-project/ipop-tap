@@ -7,6 +7,7 @@
 #define BUF_OFFSET 80
 #define ID_SIZE 20
 #define KEY_SIZE 32
+#define ADDR_SIZE 32
 #define TABLE_SIZE 10
 
 typedef struct thread_opts {
