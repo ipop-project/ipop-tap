@@ -11,7 +11,6 @@ all: build
 build: clean
 	mkdir -p bin
 	${CC} ${CFLAGS} ${SRC_DIR}/*.c -I${SRC_DIR} ${LIBS} -o "${BIN_DIR}/svpn"
-	cp certs/* bin
 
 clean:
 	rm -rf bin
