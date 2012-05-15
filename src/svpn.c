@@ -198,15 +198,16 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
 int
 main(int argc, char *argv[])
 {
-    char ip[] = "172.31.0.100";
+    char ipv4_addr[] = "172.31.0.100";
+    char ipv6_addr[] = "fd50:0dbc:41f2:4a3c:0:0:0:1000";
     thread_opts_t opts;
     opts.sock = create_udp_socket(5800);
     opts.tap = open_tap("svpn0", opts.mac);
-    opts.local_ip = ip;
+    opts.local_ip = ipv4_addr;
     opts.dtls = 0;
     init_dtls(&opts);
-    configure_tap(opts.tap, ip, MTU);
-    set_local_peer("nobody", ip);
+    configure_tap(opts.tap, ipv4_addr, ipv6_addr, MTU);
+    set_local_peer("nobody", ipv4_addr);
 
     // drop root priviledges and set to nobody
     // I need to add chroot jail in here later
@@ -254,5 +255,6 @@ main(int argc, char *argv[])
         }
         process_inputs(&opts, inputs, &dtls_thread);
     }
+    return 0;
 }
 

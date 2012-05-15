@@ -2,7 +2,7 @@
 #ifndef _SVPN_H_
 #define _SVPN_H_
 
-#define MTU 1200
+#define MTU 1300
 #define BUFLEN 2048
 #define BUF_OFFSET 80
 #define ID_SIZE 20
