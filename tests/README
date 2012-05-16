@@ -1,0 +1,10 @@
+
+Compile SSL_proxy
+
+gcc dtls_server.c bss_fifo.c -I. -lssl -lcrypto -lpthread -o ssl_proxy
+
+Info
+
+- Make sure you copy the peer2.pem file in the certs folder in the
+  same directory as the ssl_proxy
+

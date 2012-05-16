@@ -178,7 +178,7 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
         strncpy(id, inputs[1], ID_SIZE);
         get_source_info(id, source, dest, key);
         printf("id = %s ip = %s addr = %s\n", id, 
-            inet_ntoa(*(struct in_addr*)source), inputs[4]);
+            inet_ntoa(*(struct in_addr*)source), inputs[5]);
     }
     else if (strcmp(inputs[0], "dtls") == 0) {
         if (opts->dtls == 0) {
