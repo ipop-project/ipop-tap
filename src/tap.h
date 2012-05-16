@@ -6,5 +6,6 @@ int open_tap(char *dev, char *mac);
 
 int configure_tap(int fd, char *ipv4_addr, char *ipv6_addr, int mtu);
 
-#endif
+void cleanup_tap();
 
+#endif

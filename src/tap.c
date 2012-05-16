@@ -13,6 +13,8 @@
 
 #include <tap.h>
 
+// we are forced to create these two sockets in order to configure the TAP
+// device
 static int sock_ipv4 = -1;
 static int sock_ipv6 = -1;
 static struct ifreq ifr;
@@ -31,7 +33,7 @@ open_tap(char *dev, char *mac)
     if ((fd = open("/dev/net/tun", O_RDWR)) < 0) {
 #endif
         fprintf(stderr, "open failed fd = %d\n", fd);
-        return -1;   
+        return -1;
     }
 
     memset(&ifr, 0, sizeof(ifr));
@@ -108,7 +110,7 @@ configure_tap(int fd, char *ipv4_addr, char *ipv6_addr, int mtu)
     sockaddr_ipv4.sin_addr = local_ipv4_addr;
     sockaddr_ipv4.sin_family = AF_INET;
     memcpy(&ifr.ifr_addr, &sockaddr_ipv4, sizeof(struct sockaddr));
-    
+
     if (ioctl(sock_ipv4, SIOCSIFADDR, &ifr) < 0) {
         fprintf(stderr, "Set address for IPv4 failed\n");
         close(fd);
@@ -116,7 +118,7 @@ configure_tap(int fd, char *ipv4_addr, char *ipv6_addr, int mtu)
         close(sock_ipv6);
         return -1;
     }
-    
+
     // Give the device an IPv6 address
     /*
     memset(&sockaddr_ipv6, 0, sizeof(sockaddr_ipv6));
@@ -126,7 +128,7 @@ configure_tap(int fd, char *ipv4_addr, char *ipv6_addr, int mtu)
     sockaddr_ipv6.sin6_flowinfo = 0;
     sockaddr_ipv6.sin6_port = 0;
     memcpy(&ifr.ifr_addr, &sockaddr_ipv6, sizeof(struct sockaddr));
-    
+
     if (ioctl(sock_ipv6, SIOCSIFADDR, &ifr) < 0) {
         fprintf(stderr, "Set address for IPv6 failed\n");
         close(fd);
@@ -160,3 +162,9 @@ configure_tap(int fd, char *ipv4_addr, char *ipv6_addr, int mtu)
     return 0;
 }
 
+void cleanup_tap() {
+    // call after opening an configuring the TAP device, to close the sockets
+    // used to create the TAP device
+    close(sock_ipv4);
+    close(sock_ipv6);
+}

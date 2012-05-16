@@ -53,7 +53,7 @@ udp_send_thread(void *data)
             continue;
         }
 
-        while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr, 
+        while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr,
             (char *)key, (char *)p2p_addr, &idx) >= 0) {
 
             translate_packet(buf, NULL, NULL, rcount);
@@ -73,7 +73,7 @@ udp_send_thread(void *data)
 
             rcount += BUF_OFFSET;
 
-            if (sendto(sock, enc_buf, rcount, 0, (struct sockaddr*) &addr, 
+            if (sendto(sock, enc_buf, rcount, 0, (struct sockaddr*) &addr,
                 addrlen) < 0) {
                 fprintf(stderr, "sendto failed\n");
             }
@@ -111,7 +111,7 @@ udp_recv_thread(void *data)
 
     while (1) {
 
-        if ((rcount = recvfrom(sock, dec_buf, BUFLEN, 0, 
+        if ((rcount = recvfrom(sock, dec_buf, BUFLEN, 0,
                (struct sockaddr*) &addr, &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
             break;
@@ -177,7 +177,7 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
         add_peer(inputs[1], inputs[2], atoi(inputs[3]), inputs[4], inputs[5]);
         strncpy(id, inputs[1], ID_SIZE);
         get_source_info(id, source, dest, key);
-        printf("id = %s ip = %s addr = %s\n", id, 
+        printf("id = %s ip = %s addr = %s\n", id,
             inet_ntoa(*(struct in_addr*)source), inputs[4]);
     }
     else if (strcmp(inputs[0], "dtls") == 0) {
@@ -207,6 +207,7 @@ main(int argc, char *argv[])
     opts.dtls = 0;
     init_dtls(&opts);
     configure_tap(opts.tap, ipv4_addr, ipv6_addr, MTU);
+    cleanup_tap();
     set_local_peer("nobody", ipv4_addr);
 
     // drop root priviledges and set to nobody
@@ -257,4 +258,3 @@ main(int argc, char *argv[])
     }
     return 0;
 }
-
