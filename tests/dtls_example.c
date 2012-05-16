@@ -119,7 +119,7 @@ init_peer(int type, peer_t *peer)
 }
 
 static int
-start_client()
+start_client(char *ip, char *port)
 {
     printf("starting client\n");
 
@@ -134,22 +134,25 @@ start_client()
 
     memset(&addr, 0, addr_len);
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(12345);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(atoi(port));
+    addr.sin_addr.s_addr = inet_addr(ip);
 
     BIO_ctrl(peer.dbio, BIO_CTRL_DGRAM_SET_PEER, 0, &addr);
     SSL_do_handshake(peer.ssl);
 
-    char *line = NULL;
+    char input[50] = { '\0' };
     size_t len = 0;
 
-    while (1) {
-        getline(&line, &len, stdin);
-        SSL_write(peer.ssl, line, len);
-    }
-    //SSL_read(peer.ssl, buf, sizeof(buf));
-    printf("%s\n", buf);
+    SSL_write(peer.ssl, "this is silly", 13);
 
+    /*
+    while (fgets(input, sizeof(input), stdin) != NULL) {
+        SSL_write(peer.ssl, buf, strlen(input));
+    }
+    */
+    SSL_read(peer.ssl, buf, sizeof(buf));
+    printf("%s\n", buf);
+  
     return 0;
 }
 
@@ -207,7 +210,7 @@ main(int argc, char *argv[])
     SSL_library_init();
 
     if (argv[1][0] == 'c') {
-        start_client();
+        start_client(argv[2], argv[3]);
     }
     else {
         start_server();
