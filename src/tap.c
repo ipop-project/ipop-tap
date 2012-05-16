@@ -70,14 +70,6 @@ open_tap(char *dev, char *mac)
         close(sock_ipv6);
         return -1;
     }
-    
-    if (ioctl(sock_ipv6, SIOCGIFHWADDR, &ifr) < 0) {
-       fprintf(stderr, "get mac failed\n");
-        close(fd);
-        close(sock_ipv4);
-        close(sock_ipv6);
-        return -1;
-    }
 
     memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
     return fd;
@@ -159,14 +151,6 @@ configure_tap(int fd, char *ipv4_addr, char *ipv6_addr, int mtu)
 
     if (ioctl(sock_ipv4, SIOCSIFFLAGS, &ifr) < 0) {
         fprintf(stderr, "Set flags for IPv4 failed\n");
-        close(fd);
-        close(sock_ipv4);
-        close(sock_ipv6);
-        return -1;
-    }
-
-    if (ioctl(sock_ipv6, SIOCSIFFLAGS, &ifr) < 0) {
-        fprintf(stderr, "Set flags for IPv6 failed\n");
         close(fd);
         close(sock_ipv4);
         close(sock_ipv6);
