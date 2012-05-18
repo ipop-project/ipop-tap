@@ -144,8 +144,8 @@ start_dtls_client(void *data)
 
     unsigned char buf[BUFLEN];
     unsigned char dec_buf[BUFLEN];
-    unsigned char key[KEY_SIZE] = { 0 };
-    unsigned char iv[KEY_SIZE] = { 0 };
+    //unsigned char key[KEY_SIZE] = { 0 };
+    //unsigned char iv[KEY_SIZE] = { 0 };
     unsigned char p2p_addr[ADDR_SIZE] = { 0 };
     char source_id[KEY_SIZE] = { 0 };
     char dest_id[KEY_SIZE] = { 0 };
@@ -170,7 +170,7 @@ start_dtls_client(void *data)
 
         get_headers(dec_buf, source_id, dest_id, p2p_addr);
 
-        if (get_source_info_by_addr(p2p_addr, source, dest)) {
+        if (get_source_info_by_addr((char *)p2p_addr, source, dest)) {
             fprintf(stderr, "dtls info not found\n");
             continue;
         }

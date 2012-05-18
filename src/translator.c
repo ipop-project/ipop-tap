@@ -109,7 +109,6 @@ update_upnp(char *buf, const char *source, const char *dest,
         ustate.c_port = s_port;
     }
     else if (source != NULL && buf[23] == 0x11 && ustate.c_port == d_port) {
-
         i = 42;
         while (i < len) {
             if (strncmp("http://172.", buf + i, 11) == 0) {
@@ -135,6 +134,44 @@ update_upnp(char *buf, const char *source, const char *dest,
             i++;
         }
     }
+    return 0;
+}
+
+static int
+update_sip(char *buf, const char *source, const char *dest,
+    ssize_t len)
+{
+    char tmp;
+    int i;
+
+    uint16_t s_port = (buf[34] << 8 & 0xFF00) + (buf[35] & 0xFF);
+
+    if (source != NULL && buf[23] == 0x11 && s_port == 5060) {
+        i = 42;
+        while (i < len) {
+            if (strncmp("sip:", buf + i, 4) == 0) {
+                while (i < len) {
+                    i++;
+                    if(strncmp("172.", buf + i, 4) == 0 &&
+                       strncmp(".0.1", buf + i + 6, 4) == 0) {
+                        if (strncmp("00", buf + i + 10, 2) == 0) {
+                            tmp = buf[i + 12];
+                            sprintf(buf + i + 9, "%d", source[3]);
+                            buf[i + 12] = tmp;
+                        }
+                        else {
+                            tmp = buf[i + 12];
+                            sprintf(buf + i + 9, "%d", dest[3]);
+                            buf[i + 12] = tmp;
+                        }
+                    }
+                }
+                break;
+            }
+            i++;
+        }
+    }
+
     return 0;
 }
 
@@ -170,5 +207,6 @@ translate_packet(unsigned char *buf, const char *source, const char *dest,
     ssize_t len)
 {
     update_upnp((char *)buf, source, dest, len);
+    update_sip((char*)buf, source, dest, len);
     return 0;
 }

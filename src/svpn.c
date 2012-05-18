@@ -49,7 +49,10 @@ udp_send_thread(void *data)
         printf("T >> %d %x %x\n", rcount, buf[32], buf[33]);
 
         if (buf[12] == 0x08 && buf[13] == 0x06 && create_arp_response(buf)) {
-            write(tap, buf, rcount);
+            if (write(tap, buf, rcount) < 0) {
+                fprintf(stderr, "tap write failed\n");
+                break;
+            }
             continue;
         }
 
@@ -254,5 +257,6 @@ main(int argc, char *argv[])
         }
         process_inputs(&opts, inputs, &dtls_thread);
     }
+    return 0;
 }
 
