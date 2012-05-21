@@ -15,7 +15,8 @@ typedef struct thread_opts {
     int sock6;
     int tap;
     char mac[6];
-    char *local_ip;
+    char *local_ip4;
+    char *local_ip6;
     char dtls_ip[16];
     int dtls_port;
     int dtls;

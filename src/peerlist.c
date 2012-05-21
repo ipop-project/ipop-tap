@@ -43,9 +43,23 @@ void set_local_peer(const char *local_id, const char *local_ip)
     clear_table();
 }
 
+/**
+ * id --        Some string used as an identifier name for the client.
+ * dest_ipv4 -- The IPv4 Address to actually send the data to (must be directly
+ *              accessible). All traffic ends up getting sent to this address.
+ * dest_ipv6 -- The virtual IPv6 address assigned to the client (usually
+ *              random). We should never get collisions between these addresses.
+ *              This address is simply needed by the peerlist so that when we
+ *              intercept a packet, we can look up where to send it by the IPv6
+ *              address.
+ * port --      The port to communicate with the client peer over.
+ * key --       The key used for authentication (should be identical on both
+ *              peers)
+ * p2p_addr --  TODO: Document Me!
+ */
 int
-add_peer(const char *id, const char *dest_ip, const uint16_t port, 
-    const char *key, const char *p2p_addr)
+add_peer(const char *id, const char *dest_ipv4, const char *dest_ipv6,
+         const uint16_t port, const char *key, const char *p2p_addr)
 {
     // TODO - this is a hack, hash func should be used here
     // this is done because we are takin string input from user
@@ -64,7 +78,7 @@ add_peer(const char *id, const char *dest_ip, const uint16_t port,
             if (memcmp(tmp_id, table[i].id, ID_SIZE) == 0) {
                 memcpy(table[i].key, tmp_key, KEY_SIZE);
                 memcpy(table[i].p2p_addr, tmp_addr, ADDR_SIZE);
-                table[i].dest_ip = inet_addr(dest_ip);
+                table[i].dest_ip = inet_addr(dest_ipv4);
                 table[i].port = port;
                 return 0;
             }
@@ -78,7 +92,7 @@ add_peer(const char *id, const char *dest_ip, const uint16_t port,
         memcpy(table[i].p2p_addr, tmp_addr, ADDR_SIZE);
 
         table[i].local_ip = _base_ip;
-        table[i].dest_ip = inet_addr(dest_ip);
+        table[i].dest_ip = inet_addr(dest_ipv4);
         table[i].port = port;
         unsigned char *ip = (unsigned char *)&_base_ip;
         ip[3] += 1;
@@ -88,7 +102,7 @@ add_peer(const char *id, const char *dest_ip, const uint16_t port,
 }
 
 int
-get_dest_info(const char *local_ip, char *source_id, char *dest_id, 
+get_dest_info(const char *local_ip, char *source_id, char *dest_id,
     struct sockaddr_in *addr, char *key, char *p2p_addr, int *idx)
 {
     memcpy(source_id, _local_id, ID_SIZE);
@@ -178,4 +192,3 @@ get_source_info_by_addr(const char *p2p_addr, char *source, char *dest)
     }
     return -1;
 }
-

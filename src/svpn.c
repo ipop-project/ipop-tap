@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h> // used to generate random seed
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -47,36 +48,44 @@ udp_send_thread(void *data)
             break;
         }
 
-        printf("T >> %d %x %x\n", rcount, buf[32], buf[33]);
+        if (buf[14] == 0x45) { // ipv4 packet
+            printf("T >> %d %x %x\n", rcount, buf[32], buf[33]);
 
-        while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr,
-            (char *)key, (char *)p2p_addr, &idx) >= 0) {
+            while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr,
+                (char *)key, (char *)p2p_addr, &idx) >= 0) {
 
-            translate_packet(buf, NULL, NULL, rcount);
+                translate_packet(buf, NULL, NULL, rcount);
 
-            set_headers(enc_buf, source_id, dest_id, iv);
+                set_headers(enc_buf, source_id, dest_id, iv);
 
-            if (opts->dtls == 1) {
-                set_headers(enc_buf, source_id, dest_id, p2p_addr);
-                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-                svpn_dtls_send(enc_buf, rcount + BUF_OFFSET);
+                if (opts->dtls == 1) {
+                    set_headers(enc_buf, source_id, dest_id, p2p_addr);
+                    memcpy(enc_buf + BUF_OFFSET, buf, rcount);
+                    svpn_dtls_send(enc_buf, rcount + BUF_OFFSET);
+                    if (idx++ == -1) break;
+                    continue;
+                }
+
+                rcount = aes_encrypt(buf, enc_buf + BUF_OFFSET, key, iv,
+                    rcount);
+
+                rcount += BUF_OFFSET;
+
+                if (sendto(sock4, enc_buf, rcount, 0, (struct sockaddr*) &addr,
+                    addrlen) < 0) {
+                    fprintf(stderr, "sendto failed\n");
+                }
+
+                printf("S >> %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
+
                 if (idx++ == -1) break;
-                continue;
             }
-
-            rcount = aes_encrypt(buf, enc_buf + BUF_OFFSET, key, iv,
-                rcount);
-
-            rcount += BUF_OFFSET;
-
-            if (sendto(sock4, enc_buf, rcount, 0, (struct sockaddr*) &addr,
-                addrlen) < 0) {
-                fprintf(stderr, "sendto failed\n");
-            }
-
-            printf("S >> %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
-
-            if (idx++ == -1) break;
+        } else if (buf[14] == 0x60) { // ipv6 packet
+            fprintf(stderr, "We got an IPv6 packet from the tap, but we don't "
+                            "know how to send it out through a socket yet.\n");
+        } else {
+            fprintf(stderr, "Cannot determine packet type to be an IPv4 or 6 "
+                            "packet.\n");
         }
     }
 
@@ -169,11 +178,13 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
     char id[ID_SIZE] = { 0 };
 
     if (strcmp(inputs[0], "setid") == 0) {
-        set_local_peer(inputs[1], opts->local_ip);
-        printf("id = %s ip = %s\n", inputs[1], opts->local_ip);
+        set_local_peer(inputs[1], opts->local_ip4);
+        printf("id = %s ipv4 = %s ipv6 = %s\n",
+               inputs[1], opts->local_ip4, opts->local_ip6);
     }
     else if (strcmp(inputs[0], "add") == 0) {
-        add_peer(inputs[1], inputs[2], atoi(inputs[3]), inputs[4], inputs[5]);
+        add_peer(inputs[1], inputs[2], inputs[3], atoi(inputs[3]), inputs[4],
+                 inputs[5]);
         strncpy(id, inputs[1], ID_SIZE);
         get_source_info(id, source, dest, key);
         printf("id = %s ip = %s addr = %s\n", id,
@@ -194,22 +205,50 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
     return 0;
 }
 
+/**
+ * Generates a string containing an IPv6 address with the given prefix. Maximum
+ * written string length is 39 characters, and is written to `address`.
+ */
+static int
+generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
+{
+    if (prefix_len % 16) {
+        fprintf(stderr, "Bad prefix_len value. (only multiples of 16 are "
+                        "supported");
+        return -1;
+    }
+    unsigned short blocks_left = (128-prefix_len) / 16;
+    strcpy(address, prefix);
+    for (int i = 0; i < blocks_left; i++) {
+        if (blocks_left-i <= 1)
+            // ensure the last block is of constant string length
+            sprintf(&address[strlen(address)], ":%x",
+                    (rand() % (0xEFFF+1)) + 0x1000);
+        else
+            sprintf(&address[strlen(address)], ":%x", rand() % (0xFFFF+1));
+    }
+}
+
 int
 main(int argc, char *argv[])
 {
     char ipv4_addr[] = "172.31.0.100";
-    char ipv6_addr[] = "fd50:0dbc:41f2:4a3c:0:0:0:1000";
+    srand(time(NULL)); // set up random number generator
+    char ipv6_addr[39];
+    generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
     thread_opts_t opts;
+
     opts.sock4 = create_udp_socket(5800);
     //opts.sock6 = create_udp_socket(5800);
     opts.tap = tap_open("svpn0", opts.mac);
-    opts.local_ip = ipv4_addr;
+    opts.local_ip4 = ipv4_addr;
+    opts.local_ip6 = ipv6_addr;
     opts.dtls = 0;
     init_dtls(&opts);
 
     // configure the tap device
     tap_set_ipv4_addr(ipv4_addr, 24);
-    tap_set_ipv6_addr(ipv6_addr, 112);
+    tap_set_ipv6_addr(ipv6_addr, 64);
     tap_set_mtu(MTU);
     tap_set_base_flags();
     tap_set_up();
