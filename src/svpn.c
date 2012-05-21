@@ -22,7 +22,8 @@ static void *
 udp_send_thread(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
-    int sock = opts->sock;
+    int sock4 = opts->sock4;
+    int sock6 = opts->sock6;
     int tap = opts->tap;
 
     int rcount;
@@ -68,7 +69,7 @@ udp_send_thread(void *data)
 
             rcount += BUF_OFFSET;
 
-            if (sendto(sock, enc_buf, rcount, 0, (struct sockaddr*) &addr,
+            if (sendto(sock4, enc_buf, rcount, 0, (struct sockaddr*) &addr,
                 addrlen) < 0) {
                 fprintf(stderr, "sendto failed\n");
             }
@@ -79,8 +80,9 @@ udp_send_thread(void *data)
         }
     }
 
-    close(sock);
-    close(tap);
+    close(sock4);
+    // close(sock6);
+    tap_close();
     pthread_exit(NULL);
 }
 
@@ -88,7 +90,8 @@ static void *
 udp_recv_thread(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
-    int sock = opts->sock;
+    int sock4 = opts->sock4;
+    int sock6 = opts->sock6;
     int tap = opts->tap;
 
     int rcount;
@@ -106,7 +109,7 @@ udp_recv_thread(void *data)
 
     while (1) {
 
-        if ((rcount = recvfrom(sock, dec_buf, BUFLEN, 0,
+        if ((rcount = recvfrom(sock4, dec_buf, BUFLEN, 0,
                (struct sockaddr*) &addr, &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
             break;
@@ -144,8 +147,9 @@ udp_recv_thread(void *data)
 
     }
 
-    close(tap);
-    close(sock);
+    close(sock4);
+    // close(sock6);
+    tap_close();
     pthread_exit(NULL);
 }
 
@@ -196,7 +200,8 @@ main(int argc, char *argv[])
     char ipv4_addr[] = "172.31.0.100";
     char ipv6_addr[] = "fd50:0dbc:41f2:4a3c:0:0:0:1000";
     thread_opts_t opts;
-    opts.sock = create_udp_socket(5800);
+    opts.sock4 = create_udp_socket(5800);
+    //opts.sock6 = create_udp_socket(5800);
     opts.tap = tap_open("svpn0", opts.mac);
     opts.local_ip = ipv4_addr;
     opts.dtls = 0;
@@ -217,14 +222,16 @@ main(int argc, char *argv[])
     if (getuid() == 0) {
         if (setgid(pwd->pw_uid) < 0) {
             fprintf(stderr, "setgid failed\n");
-            close(opts.tap);
-            close(opts.sock);
+            close(opts.sock4);
+            // close(opts.sock6);
+            tap_close();
             return -1;
         }
         if (setuid(pwd->pw_gid) < 0) {
             fprintf(stderr, "setuid failed\n");
-            close(opts.tap);
-            close(opts.sock);
+            close(opts.sock4);
+            // close(opts.sock6);
+            tap_close();
             return -1;
         }
     }

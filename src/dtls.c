@@ -22,7 +22,7 @@ typedef struct peer {
     SSL *ssl;
     BIO *dbio;
     BIO *inbio;
-    int sock;
+    int sock; // This is an IPv4 socket. IPv6 security will be handled by IPSec.
 } peer_t;
 
 static peer_t _peer;
@@ -126,7 +126,7 @@ init_dtls(thread_opts_t *opts)
     ERR_load_SSL_strings();
     SSL_library_init();
 
-    _peer.sock = opts->sock;
+    _peer.sock = opts->sock4;
     init_peer(CLIENT, &_peer);
     return 0;
 }
@@ -203,4 +203,3 @@ svpn_dtls_process(const unsigned char *buf, int len)
 {
     return BIO_write(_peer.inbio, buf, len);
 }
-

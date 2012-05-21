@@ -11,7 +11,8 @@
 #define TABLE_SIZE 10
 
 typedef struct thread_opts {
-    int sock;
+    int sock4;
+    int sock6;
     int tap;
     char mac[6];
     char *local_ip;
@@ -21,4 +22,3 @@ typedef struct thread_opts {
 } thread_opts_t;
 
 #endif
-
