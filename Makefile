@@ -1,7 +1,7 @@
 # build with: make
 # run with:   sudo make exec
 CC=gcc
-CFLAGS=-Wall
+CFLAGS=-Wall --std=gnu99
 SRC_DIR=src
 BIN_DIR=bin
 LIBS=-lpthread -lcrypto -lssl

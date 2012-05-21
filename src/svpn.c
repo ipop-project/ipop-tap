@@ -202,12 +202,18 @@ main(int argc, char *argv[])
     char ipv6_addr[] = "fd50:0dbc:41f2:4a3c:0:0:0:1000";
     thread_opts_t opts;
     opts.sock = create_udp_socket(5800);
-    opts.tap = open_tap("svpn0", opts.mac);
+    opts.tap = tap_open("svpn0", opts.mac);
     opts.local_ip = ipv4_addr;
     opts.dtls = 0;
     init_dtls(&opts);
-    configure_tap(opts.tap, ipv4_addr, ipv6_addr, MTU);
-    cleanup_tap();
+
+    // configure the tap device
+    tap_set_ipv4_addr(ipv4_addr, 24);
+    tap_set_ipv6_addr(ipv6_addr, 112);
+    tap_set_mtu(MTU);
+    tap_set_base_flags();
+    tap_set_up();
+    // cleanup_tap();
     set_local_peer("nobody", ipv4_addr);
 
     // drop root priviledges and set to nobody
