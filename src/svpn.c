@@ -18,6 +18,7 @@
 #include <headers.h>
 #include <svpn.h>
 #include <dtls.h>
+#include <socket_utils.h>
 
 static void *
 udp_send_thread(void *data)
@@ -238,11 +239,13 @@ main(int argc, char *argv[])
     generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
     thread_opts_t opts;
 
-    opts.sock4 = create_udp_socket(5800);
-    //opts.sock6 = create_udp_socket(5800);
     opts.tap = tap_open("svpn0", opts.mac);
     opts.local_ip4 = ipv4_addr;
     opts.local_ip6 = ipv6_addr;
+    opts.sock4 = socket_utils_create_ipv4_udp_socket(5800);
+    opts.sock6 = socket_utils_create_ipv6_udp_socket(
+        5800, if_nametoindex("svpn0")
+    );
     opts.dtls = 0;
     init_dtls(&opts);
 

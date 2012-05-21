@@ -27,33 +27,6 @@ typedef struct peer {
 
 static peer_t _peer;
 
-int
-create_udp_socket(uint16_t port)
-{
-    int sock, optval = 1;
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 1) {
-        fprintf(stderr, "socket failed\n");
-        return -1;
-    }
-
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-
-    memset(&addr, 0, addr_len);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
-        fprintf(stderr, "bind failed\n");
-        close(sock);
-        return -1;
-    }
-    return sock;
-}
-
 static int
 verify_callback(int ok, X509_STORE_CTX *ctx)
 {
