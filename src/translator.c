@@ -15,36 +15,6 @@ struct upnp_state {
 
 struct upnp_state ustate = { 0, 0, { 0 }};
 
-int
-create_arp_response(unsigned char *buf)
-{
-    uint16_t *nbuf = (uint16_t *)buf;
-    int i;
-
-    if (buf[40] == 0 && buf[41] == 2) {
-        return -1;
-    }
-
-    for (i = 0; i < 3; i++) {
-        nbuf[i] = nbuf[3 + i];
-        nbuf[3 + i] = 0xFFFF;
-    }
-
-    buf[21] = 0x02;
-
-    for (i = 0; i < 5; i++) {
-        uint16_t tmp = nbuf[16 + i];
-        nbuf[16 + i] = nbuf[11 + i];
-        if (i < 3) {
-            nbuf[11 + i] = 0xFFFF;
-        }
-        else {
-            nbuf[11 + i] = tmp;
-        }
-    }
-    return 0;
-}
-
 static int
 update_checksum(unsigned char *buf, const int start, const int idx, ssize_t len)
 {
@@ -88,7 +58,7 @@ is_upnp_endpoint(const char *source, uint16_t s_port)
 {
     int i;
     for (i = 0; i < ustate.s_count; i++) {
-        if (ustate.s_ports[i] == s_port && 
+        if (ustate.s_ports[i] == s_port &&
             memcmp(source, ustate.server_ips[i], 4) == 0) {
             return 1;
         }
@@ -124,7 +94,7 @@ update_upnp(char *buf, const char *source, const char *dest,
             i++;
         }
     }
-    else if (source != NULL && buf[23] == 0x06 && 
+    else if (source != NULL && buf[23] == 0x06 &&
         is_upnp_endpoint(buf + 26, s_port)) {
         i = 66;
         while (i < len) {
@@ -139,7 +109,7 @@ update_upnp(char *buf, const char *source, const char *dest,
 }
 
 int
-translate_headers(unsigned char *buf, const char *source, const char *dest, 
+translate_headers(unsigned char *buf, const char *source, const char *dest,
     const char *mac, ssize_t len)
 {
 #ifndef SVPN_TEST
@@ -166,7 +136,7 @@ translate_headers(unsigned char *buf, const char *source, const char *dest,
 }
 
 int
-translate_packet(unsigned char *buf, const char *source, const char *dest, 
+translate_packet(unsigned char *buf, const char *source, const char *dest,
     ssize_t len)
 {
     update_upnp((char *)buf, source, dest, len);

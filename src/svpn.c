@@ -48,11 +48,6 @@ udp_send_thread(void *data)
 
         printf("T >> %d %x %x\n", rcount, buf[32], buf[33]);
 
-        if (buf[12] == 0x08 && buf[13] == 0x06 && create_arp_response(buf)) {
-            write(tap, buf, rcount);
-            continue;
-        }
-
         while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr,
             (char *)key, (char *)p2p_addr, &idx) >= 0) {
 
