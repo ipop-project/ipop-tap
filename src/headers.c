@@ -1,9 +1,11 @@
 
 #include <string.h>
+
 #include <svpn.h>
+#include <headers.h>
 
 int
-get_headers(const unsigned char *buf, char *source_id, char *dest_id, 
+get_headers(const unsigned char *buf, char *source_id, char *dest_id,
     unsigned char *iv)
 {
     memcpy(source_id, buf, ID_SIZE);
@@ -13,7 +15,7 @@ get_headers(const unsigned char *buf, char *source_id, char *dest_id,
 }
 
 int
-set_headers(unsigned char *buf, const char *source_id, const char *dest_id, 
+set_headers(unsigned char *buf, const char *source_id, const char *dest_id,
     const unsigned char *iv)
 {
     memcpy(buf, source_id, ID_SIZE);
@@ -21,4 +23,3 @@ set_headers(unsigned char *buf, const char *source_id, const char *dest_id,
     memcpy(buf + 2 * ID_SIZE, iv, KEY_SIZE);
     return 0;
 }
-

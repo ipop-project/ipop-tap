@@ -10,26 +10,20 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-//#include <linux/if.h>
 #include <net/if.h>
-//#include <linux/socket.h>
 #include <linux/if_tun.h>
 #include <net/route.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <endian.h>
 
-#include "tap.h"
+#include <tap.h>
 
 struct in6_ifreq {
     struct in6_addr ifr6_addr;
     uint32_t ifr6_prefixlen;
     int ifr6_ifindex;
 };
-
-
-// including <net/if.h> would cause some conflicts
-//unsigned if_nametoindex(const char *ifname);
 
 static int tap_set_flags(short enable, short disable);
 static int tap_set_proc_option(const sa_family_t family, const char *option,
@@ -116,7 +110,6 @@ tap_open(const char *device, char *mac)
 static int
 tap_set_flags(short enable, short disable)
 {
-    //memset(&ifr.ifr_flags, 0, sizeof(ifr.ifr_flags));
     // read the current flag states
     if (ioctl(ipv6_configuration_socket, SIOCGIFFLAGS, &ifr) < 0) {
         fprintf(stderr, "Could not read device flags for TAP device. (Device "
@@ -181,6 +174,7 @@ tap_set_mtu(int mtu)
         fprintf(stderr, "Set MTU failed\n");
         tap_close(); return -1;
     }
+    return 0;
 }
 
 /**
@@ -198,8 +192,7 @@ tap_plen_to_ipv4_mask(unsigned int prefix_len, struct sockaddr *writeback)
     net_mask_int = be32toh(net_mask_int); // big endian to host format
     struct sockaddr_in net_mask = {
         .sin_family = AF_INET,
-        .sin_port = 0,
-        0
+        .sin_port = 0
     };
     struct in_addr net_mask_addr = {.s_addr = net_mask_int};
     net_mask.sin_addr = net_mask_addr;
@@ -378,6 +371,7 @@ tap_disable_ipv6_autoconfig()
     if (tap_set_ipv6_proc_option("autoconf", "0") < 0) {
         tap_close(); return -1;
     }
+    return 0;
 }
 
 /**

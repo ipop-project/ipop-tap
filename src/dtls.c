@@ -73,9 +73,9 @@ init_peer(int type, peer_t *peer)
     peer->dbio = BIO_new_dgram(peer->sock, BIO_NOCLOSE);
     peer->inbio = BIO_new_fifo(20, 1700);
 
-    struct timeval timeout;
-    timeout.tv_usec = 250000;
-    timeout.tv_sec = 0;
+    // struct timeval timeout;
+    // timeout.tv_usec = 250000;
+    // timeout.tv_sec = 0;
 
     //BIO_ctrl(peer->inbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
     SSL_set_bio(peer->ssl, peer->inbio, peer->dbio);
@@ -116,8 +116,8 @@ start_dtls_client(void *data)
 
     unsigned char buf[BUFLEN];
     unsigned char dec_buf[BUFLEN];
-    unsigned char key[KEY_SIZE] = { 0 };
-    unsigned char iv[KEY_SIZE] = { 0 };
+    // unsigned char key[KEY_SIZE] = { 0 };
+    // unsigned char iv[KEY_SIZE] = { 0 };
     unsigned char p2p_addr[ADDR_SIZE] = { 0 };
     char source_id[KEY_SIZE] = { 0 };
     char dest_id[KEY_SIZE] = { 0 };
@@ -142,7 +142,7 @@ start_dtls_client(void *data)
 
         get_headers(dec_buf, source_id, dest_id, p2p_addr);
 
-        if (get_source_info_by_addr(p2p_addr, source, dest)) {
+        if (get_source_info_by_addr((char *)p2p_addr, source, dest)) {
             fprintf(stderr, "dtls info not found\n");
             continue;
         }

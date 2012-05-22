@@ -4,6 +4,7 @@
 #include <time.h> // used to generate random seed
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <net/if.h>
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
@@ -77,7 +78,8 @@ udp_send_thread(void *data)
                     fprintf(stderr, "sendto failed\n");
                 }
 
-                printf("S >> %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
+                printf("S >> %d %x\n", rcount,
+                       (unsigned int)addr.sin_addr.s_addr);
 
                 if (idx++ == -1) break;
             }
@@ -91,7 +93,7 @@ udp_send_thread(void *data)
     }
 
     close(sock4);
-    // close(sock6);
+    close(sock6);
     tap_close();
     pthread_exit(NULL);
 }
@@ -158,7 +160,7 @@ udp_recv_thread(void *data)
     }
 
     close(sock4);
-    // close(sock6);
+    close(sock6);
     tap_close();
     pthread_exit(NULL);
 }
@@ -228,6 +230,7 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
         else
             sprintf(&address[strlen(address)], ":%x", rand() % (0xFFFF+1));
     }
+    return 0;
 }
 
 int
@@ -265,14 +268,14 @@ main(int argc, char *argv[])
         if (setgid(pwd->pw_uid) < 0) {
             fprintf(stderr, "setgid failed\n");
             close(opts.sock4);
-            // close(opts.sock6);
+            close(opts.sock6);
             tap_close();
             return -1;
         }
         if (setuid(pwd->pw_gid) < 0) {
             fprintf(stderr, "setuid failed\n");
             close(opts.sock4);
-            // close(opts.sock6);
+            close(opts.sock6);
             tap_close();
             return -1;
         }
