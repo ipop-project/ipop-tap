@@ -15,7 +15,6 @@
 #include <net/route.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <endian.h>
 
 #include <tap.h>
 
@@ -189,7 +188,7 @@ tap_plen_to_ipv4_mask(unsigned int prefix_len, struct sockaddr *writeback)
     // I haven't tested this on a big endian system, but I believe this is an
     // endian-related issue. If this suddenly fails on Android, this line might
     // be why:
-    net_mask_int = be32toh(net_mask_int); // big endian to host format
+    net_mask_int = htonl(net_mask_int); // host format to network byte order
     struct sockaddr_in net_mask = {
         .sin_family = AF_INET,
         .sin_port = 0
