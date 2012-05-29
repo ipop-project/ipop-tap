@@ -142,16 +142,20 @@ start_dtls_client(void *data)
 
         get_headers(dec_buf, source_id, dest_id, p2p_addr);
 
-        if (get_source_info_by_addr((char *)p2p_addr, source, dest)) {
+        struct peer_state *peer = NULL;
+        if (peerlist_get_by_p2p_addr((char *)p2p_addr, &peer)) {
             fprintf(stderr, "dtls info not found\n");
             continue;
         }
+        memcpy(source, &peer->local_ipv4_addr.s_addr, sizeof(source));
+        memcpy(dest, &peerlist_local.local_ipv4_addr.s_addr, sizeof(dest));
 
         rcount -= BUF_OFFSET;
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
         translate_packet(buf, source, dest, rcount);
 
-        if (translate_headers(buf, source, dest, opts->mac, rcount) < 0) {
+        translate_mac(buf, opts->mac);
+        if (translate_headers(buf, source, dest, rcount) < 0) {
             fprintf(stderr, "dtls translate error\n");
             continue;
         }

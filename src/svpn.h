@@ -10,6 +10,8 @@
 #define ADDR_SIZE 32
 #define TABLE_SIZE 10
 
+#define IPV6_ADDR_FILE "../ipv6_addr"
+
 typedef struct thread_opts {
     int sock4;
     int sock6;

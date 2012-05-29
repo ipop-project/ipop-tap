@@ -67,8 +67,7 @@ is_upnp_endpoint(const char *source, uint16_t s_port)
 }
 
 static int
-update_upnp(char *buf, const char *source, const char *dest,
-    ssize_t len)
+update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
 {
     char tmp[20] = {'\0'};
     int i, idx;
@@ -109,15 +108,24 @@ update_upnp(char *buf, const char *source, const char *dest,
 }
 
 int
-translate_headers(unsigned char *buf, const char *source, const char *dest,
-    const char *mac, ssize_t len)
+translate_mac(unsigned char *buf, const char *mac)
 {
 #ifndef SVPN_TEST
     memcpy(buf, mac, 6);
     memset(buf + 6, 0xFF, 6);
+#endif
+    return 0;
+}
+
+int
+translate_headers(unsigned char *buf, const char *source, const char *dest,
+                  ssize_t len)
+{
+#ifndef SVPN_TEST
     memcpy(buf + 26, source, 4);
 
-    if (buf[30] < 224 || buf[30] > 239) {
+    if ((buf[30] < 224 || buf[30] > 239) && buf[33] != 255) {
+        // not multicast or broadcast
         memcpy(buf + 30, dest, 4);
     }
 #endif
@@ -137,7 +145,7 @@ translate_headers(unsigned char *buf, const char *source, const char *dest,
 
 int
 translate_packet(unsigned char *buf, const char *source, const char *dest,
-    ssize_t len)
+                 ssize_t len)
 {
     update_upnp((char *)buf, source, dest, len);
     return 0;
