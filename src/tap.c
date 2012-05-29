@@ -18,11 +18,15 @@
 
 #include <tap.h>
 
+#ifndef DROID_BUILD
+
 struct in6_ifreq {
     struct in6_addr ifr6_addr;
     uint32_t ifr6_prefixlen;
     int ifr6_ifindex;
 };
+
+#endif
 
 static int tap_set_flags(short enable, short disable);
 static int tap_set_proc_option(const sa_family_t family, const char *option,
@@ -315,6 +319,8 @@ tap_set_ipv4_route(const char *presentation, unsigned short prefix_len,
     return 0;
 }
 
+#ifndef DROID_BUILD
+
 /**
  * Tells the OS to route IPv6 addresses within the subnet (determined by the
  * `presentation` and `prefix_len` args, see tap_set_ipv6_addr) through us. A
@@ -349,6 +355,8 @@ tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
 
     return 0;
 }
+
+#endif
 
 /**
  * Normally an IPv6 enabled system will try to set up a device with IPv6

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/socket.h>
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>
