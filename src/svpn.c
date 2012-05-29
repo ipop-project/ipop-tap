@@ -256,7 +256,7 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
 {
     if (prefix_len % 16) {
         fprintf(stderr, "Bad prefix_len value. (only multiples of 16 are "
-                        "supported");
+                        "supported\n");
         return -1;
     }
     unsigned short blocks_left = (128-prefix_len) / 16;
@@ -278,7 +278,7 @@ get_ipv6_address(char *address) {
     if ((fd = fopen(IPV6_ADDR_FILE, "r")) == NULL) {
         generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, address);
         if ((fd = fopen(IPV6_ADDR_FILE, "w")) == NULL) {
-            fprintf(stderr, "Could not write ip address back to file");
+            fprintf(stderr, "Could not write ip address back to file\n");
         } else {
             fputs(address, fd);
             fclose(fd);
