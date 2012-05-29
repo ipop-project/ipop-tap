@@ -2,7 +2,7 @@
 #ifndef _SVPN_H_
 #define _SVPN_H_
 
-#define MTU 1200
+#define MTU 1300
 #define BUFLEN 2048
 #define BUF_OFFSET 80
 #define ID_SIZE 20
@@ -10,15 +10,18 @@
 #define ADDR_SIZE 32
 #define TABLE_SIZE 10
 
+#define IPV6_ADDR_FILE "../ipv6_addr"
+
 typedef struct thread_opts {
-    int sock;
+    int sock4;
+    int sock6;
     int tap;
     char mac[6];
-    char *local_ip;
+    char *local_ip4;
+    char *local_ip6;
     char dtls_ip[16];
     int dtls_port;
     int dtls;
 } thread_opts_t;
 
 #endif
-

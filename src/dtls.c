@@ -23,37 +23,10 @@ typedef struct peer {
     SSL *ssl;
     BIO *dbio;
     BIO *inbio;
-    int sock;
+    int sock; // This is an IPv4 socket. IPv6 security will be handled by IPSec.
 } peer_t;
 
 static peer_t _peer;
-
-int
-create_udp_socket(uint16_t port)
-{
-    int sock, optval = 1;
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 1) {
-        fprintf(stderr, "socket failed\n");
-        return -1;
-    }
-
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-
-    memset(&addr, 0, addr_len);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
-        fprintf(stderr, "bind failed\n");
-        close(sock);
-        return -1;
-    }
-    return sock;
-}
 
 static int
 verify_callback(int ok, X509_STORE_CTX *ctx)
@@ -101,9 +74,9 @@ init_peer(int type, peer_t *peer)
     peer->dbio = BIO_new_dgram(peer->sock, BIO_NOCLOSE);
     peer->inbio = BIO_new_fifo(20, 1700);
 
-    struct timeval timeout;
-    timeout.tv_usec = 250000;
-    timeout.tv_sec = 0;
+    // struct timeval timeout;
+    // timeout.tv_usec = 250000;
+    // timeout.tv_sec = 0;
 
     //BIO_ctrl(peer->inbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
     SSL_set_bio(peer->ssl, peer->inbio, peer->dbio);
@@ -127,7 +100,7 @@ init_dtls(thread_opts_t *opts)
     ERR_load_SSL_strings();
     SSL_library_init();
 
-    _peer.sock = opts->sock;
+    _peer.sock = opts->sock4;
     init_peer(CLIENT, &_peer);
     return 0;
 }
@@ -144,8 +117,8 @@ start_dtls_client(void *data)
 
     unsigned char buf[BUFLEN];
     unsigned char dec_buf[BUFLEN];
-    //unsigned char key[KEY_SIZE] = { 0 };
-    //unsigned char iv[KEY_SIZE] = { 0 };
+    // unsigned char key[KEY_SIZE] = { 0 };
+    // unsigned char iv[KEY_SIZE] = { 0 };
     unsigned char p2p_addr[ADDR_SIZE] = { 0 };
     char source_id[KEY_SIZE] = { 0 };
     char dest_id[KEY_SIZE] = { 0 };
@@ -170,16 +143,20 @@ start_dtls_client(void *data)
 
         get_headers(dec_buf, source_id, dest_id, p2p_addr);
 
-        if (get_source_info_by_addr((char *)p2p_addr, source, dest)) {
+        struct peer_state *peer = NULL;
+        if (peerlist_get_by_p2p_addr((char *)p2p_addr, &peer)) {
             fprintf(stderr, "dtls info not found\n");
             continue;
         }
+        memcpy(source, &peer->local_ipv4_addr.s_addr, sizeof(source));
+        memcpy(dest, &peerlist_local.local_ipv4_addr.s_addr, sizeof(dest));
 
         rcount -= BUF_OFFSET;
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
         translate_packet(buf, source, dest, rcount);
 
-        if (translate_headers(buf, source, dest, opts->mac, rcount) < 0) {
+        translate_mac(buf, opts->mac);
+        if (translate_headers(buf, source, dest, rcount) < 0) {
             fprintf(stderr, "dtls translate error\n");
             continue;
         }
@@ -204,4 +181,3 @@ svpn_dtls_process(const unsigned char *buf, int len)
 {
     return BIO_write(_peer.inbio, buf, len);
 }
-
