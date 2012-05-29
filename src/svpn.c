@@ -186,7 +186,6 @@ udp_recv_thread(void *data)
             }
         } else if (buf[14] == 0x60) {
             // ipv6: nothing to do!
-            printf("Received ipv6 packet! Congrats!\n");
         } else {
             fprintf(stderr, "Warning: unknown IP packet type: 0x%x\n", buf[14]);
         }
