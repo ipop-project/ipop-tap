@@ -6,7 +6,6 @@
 
 // normally these values are defined in svpn.h:
 #define ID_SIZE 20
-#define KEY_SIZE 32
 #define ADDR_SIZE 32
 
 struct peer_state {
@@ -15,8 +14,6 @@ struct peer_state {
     struct in6_addr local_ipv6_addr; // the virtual IPv6 address that we see
     struct in_addr dest_ipv4_addr;  // the actual address to send data to
     uint16_t port; // The open port on the client that we're connected to
-    char key[KEY_SIZE+1]; // AES key used to encrypt/decrypt data to/from peer
-    char p2p_addr[ADDR_SIZE+1]; // Brunet P2P address of client
 };
 
 extern struct peer_state peerlist_local; // used to publicly expose the local
@@ -29,10 +26,9 @@ int peerlist_set_local(const char *_local_id,
 int peerlist_set_local_p(const char *_local_id, const char *_local_ipv4_addr_p,
                          const char *_local_ipv6_addr_p);
 int peerlist_add(const char *id, const struct in_addr *dest_ipv4,
-                 const struct in6_addr *dest_ipv6, const uint16_t port,
-                 const char *key, const char *p2p_addr);
+                 const struct in6_addr *dest_ipv6, const uint16_t port);
 int peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
-                   const uint16_t port, const char *key, const char *p2p_addr);
+                   const uint16_t port);
 int peerlist_get_by_id(const char *id, struct peer_state **peer);
 int peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
                                     struct peer_state **peer);
@@ -42,6 +38,5 @@ int peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
-int peerlist_get_by_p2p_addr(const char *p2p_addr, struct peer_state **peer);
 
 #endif

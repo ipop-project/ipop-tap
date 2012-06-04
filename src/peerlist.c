@@ -14,7 +14,6 @@ static size_t table_length;
 static struct hsearch_data *id_table;
 static struct hsearch_data *ipv4_addr_table;
 static struct hsearch_data *ipv6_addr_table;
-static struct hsearch_data *p2p_addr_table;
 // We can't iterate a hashtable, so we have to keep track of entries separately:
 static struct peer_state **table_entries;
 static struct peer_state *sequential_table_entries; // used with multicast
@@ -52,7 +51,6 @@ peerlist_init(size_t _table_length)
     if ((id_table =                 calloc(table_length, hsds)) == NULL ||
         (ipv4_addr_table =          calloc(table_length, hsds)) == NULL ||
         (ipv6_addr_table =          calloc(table_length, hsds)) == NULL ||
-        (p2p_addr_table =           calloc(table_length, hsds)) == NULL ||
         (table_entries =            malloc(table_length *
                                         sizeof(struct peer_state *))) == NULL ||
         (sequential_table_entries = malloc(table_length *
@@ -64,8 +62,7 @@ peerlist_init(size_t _table_length)
     // initialize the tables now that we allocated the space
     if (!hcreate_r(table_length, id_table) ||
         !hcreate_r(table_length, ipv4_addr_table) ||
-        !hcreate_r(table_length, ipv6_addr_table) ||
-        !hcreate_r(table_length, p2p_addr_table))
+        !hcreate_r(table_length, ipv6_addr_table))
     {
         fprintf(stderr, "Could not initialize peerlist tables.\n");
         return -1;
@@ -112,8 +109,6 @@ peerlist_set_local(const char *_local_id,
     peerlist_local.local_ipv6_addr = local_ipv6_addr;
     peerlist_local.dest_ipv4_addr = dest_ipv4_addr;
     peerlist_local.port = 0;
-    strcpy(peerlist_local.key, "");
-    strcpy(peerlist_local.p2p_addr, "");
 
     return 0;
 }
@@ -150,23 +145,13 @@ peerlist_set_local_p(const char *_local_id, const char *_local_ipv4_addr_p,
  *              intercept a packet, we can look up where to send it by the IPv6
  *              address.
  * port --      The port to communicate with the client peer over.
- * key --       The key used for encryption (should be identical on both peers).
- *              This is used to AES encrypt/decrypt data going over the wire.
- * p2p_addr --  A string representing the Brunet P2P address.
  */
 int
 peerlist_add(const char *id, const struct in_addr *dest_ipv4,
-             const struct in6_addr *dest_ipv6, const uint16_t port,
-             const char *key, const char *p2p_addr)
+             const struct in6_addr *dest_ipv6, const uint16_t port)
 {
     if (strlen(id) > ID_SIZE) {
         fprintf(stderr, "Bad id. Too long.\n"); return -1;
-    }
-    if (strlen(key) > KEY_SIZE) {
-        fprintf(stderr, "Bad key. Too long.\n"); return -1;
-    }
-    if (strlen(p2p_addr) > ADDR_SIZE) {
-        fprintf(stderr, "Bad p2p_addr. Too long.\n"); return -1;
     }
 
     // create and populate a peer structure
@@ -175,13 +160,10 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
         fprintf(stderr, "Not enough memory to allocate peer.\n");
     }
     strcpy(peer->id, id);
-    strcpy(peer->p2p_addr, p2p_addr);
     memcpy(&peer->local_ipv4_addr, &base_ipv4_addr, sizeof(struct in_addr));
     memcpy(&peer->local_ipv6_addr, dest_ipv6, sizeof(struct in6_addr));
     memcpy(&peer->dest_ipv4_addr, dest_ipv4, sizeof(struct in_addr));
     peer->port = port;
-    strcpy(peer->key, key);
-    strcpy(peer->p2p_addr, p2p_addr);
 
     ENTRY table_entry = {
         .data = peer
@@ -214,9 +196,6 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     table_entry.key = ipv6_key;
     hsearch_r(table_entry, ENTER, &retval, ipv6_addr_table);
 
-    // p2p_addr_table:
-    table_entry.key = peer->p2p_addr;
-    hsearch_r(table_entry, ENTER, &retval, p2p_addr_table);
     table_entries[table_entries_length] = peer;
     sequential_table_entries[table_entries_length] = *peer;
     table_entries_length++;
@@ -232,7 +211,7 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
  */
 int
 peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
-               const uint16_t port, const char *key, const char *p2p_addr)
+               const uint16_t port)
 {
     struct in_addr dest_ipv4_n;
     struct in6_addr dest_ipv6_n;
@@ -244,7 +223,7 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
         fprintf(stderr, "Bad IPv6 address format: %s\n", dest_ipv6);
         return -1;
     }
-    return peerlist_add(id, &dest_ipv4_n, &dest_ipv6_n, port, key, p2p_addr);
+    return peerlist_add(id, &dest_ipv4_n, &dest_ipv6_n, port);
 }
 
 /**
@@ -341,19 +320,4 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
         return -1;
     }
     return peerlist_get_by_local_ipv6_addr(&_local_ipv6_addr_n, peer);
-}
-
-int
-peerlist_get_by_p2p_addr(const char *p2p_addr, struct peer_state **peer)
-{
-    ENTRY *result, query;
-    query.key = malloc((strlen(p2p_addr) + 1) * sizeof(char));
-    strcpy(query.key, p2p_addr);
-    if (!hsearch_r(query, FIND, &result, p2p_addr_table)) {
-        free(query.key);
-        return -1;
-    }
-    *peer = result->data;
-    free(query.key);
-    return 0;
 }

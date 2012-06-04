@@ -12,8 +12,7 @@ LOCAL_LDLIBS := -L. -lssl -lcrypto
 LOCAL_C_INCLUDES := /home/pierre/projects/external/openssl-android/include/ \
                    ../../src/
 
-LOCAL_SRC_FILES := ../../src/bss_fifo.c ../../src/dtls.c \
-                   ../../src/encryption.c ../../src/headers.c \
+LOCAL_SRC_FILES := ../../src/bss_fifo.c ../../src/headers.c \
                    ../../src/peerlist.c ../../src/socket_utils.c \
                    ../../src/svpn.c ../../src/tap.c ../../src/translator.c \
                    ../../src/hsearch.c ../../src/hsearch_r.c

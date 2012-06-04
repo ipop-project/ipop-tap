@@ -15,10 +15,8 @@
 #include <translator.h>
 #include <peerlist.h>
 #include <tap.h>
-#include <encryption.h>
 #include <headers.h>
 #include <svpn.h>
-#include <dtls.h>
 #include <socket_utils.h>
 
 /**
@@ -37,7 +35,6 @@ udp_send_thread(void *data)
 
     unsigned char buf[BUFLEN];
     unsigned char enc_buf[BUFLEN];
-    unsigned char iv[KEY_SIZE] = { 0 };
     struct peer_state *peer = NULL;
     int peercount, is_ipv6;
 
@@ -84,37 +81,35 @@ udp_send_thread(void *data)
 
         // translate and send all the packets
         for(int i = 0; i < peercount; i++) {
-            if (!is_ipv6) translate_packet(buf, NULL, NULL, rcount);
-
-            set_headers(enc_buf, peerlist_local.id, peer[i].id, iv);
-
-            if (opts->dtls == 1 && !is_ipv6) {
+            set_headers(enc_buf, peerlist_local.id, peer[i].id);
+            if (!is_ipv6) { // IPv4 Packet
+                // IPv4 has no security mechanism in place at the moment
+                // IPv4 needs in-packet address translation
+                translate_packet(buf, NULL, NULL, rcount);
                 // send the data with dtls
-                set_headers(enc_buf, peerlist_local.id, peer[i].id,
-                            (unsigned char *)peer[i].p2p_addr);
                 memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-                svpn_dtls_send(enc_buf, rcount + BUF_OFFSET);
-                continue;
+                rcount += BUF_OFFSET;
+                // encryption would happen here, if we had some in place
+            } else { // IPv6 Packet
+                // IPv6 will typically use IPSec for security
+                // (not handled by us)
+                // Send the data without encrypting it ourselves:
+                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
+                rcount += BUF_OFFSET;
             }
-
-            // send the data without dtls
-            rcount = aes_encrypt(buf, enc_buf + BUF_OFFSET,
-                                 (unsigned char *)peer[i].key, iv, rcount);
-
-            rcount += BUF_OFFSET;
-
             struct sockaddr_in dest_ipv4_addr_sock = {
                 .sin_family = AF_INET,
                 .sin_port = htons(peer[i].port),
                 .sin_addr = peer[i].dest_ipv4_addr,
                 .sin_zero = { 0 }
             };
+
+            // send our processed packet off
             if (sendto(sock4, enc_buf, rcount, 0,
                        (struct sockaddr *)(&dest_ipv4_addr_sock),
                        sizeof(struct sockaddr_in)) < 0) {
                 fprintf(stderr, "sendto failed\n");
             }
-
             printf("S >> %d %x\n", rcount, peer[i].dest_ipv4_addr.s_addr);
         }
     }
@@ -137,12 +132,8 @@ udp_recv_thread(void *data)
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
 
-    char source[4];
-    char dest[4];
-
     unsigned char buf[BUFLEN];
     unsigned char dec_buf[BUFLEN];
-    unsigned char iv[KEY_SIZE] = { 0 };
     char source_id[ID_SIZE+1] = { 0 };
     char dest_id[ID_SIZE+1] = { 0 };
     struct peer_state *peer = NULL;
@@ -156,46 +147,36 @@ udp_recv_thread(void *data)
         }
 
         printf("S << %d %x\n", rcount, addr.sin_addr.s_addr);
-
-        if (opts->dtls == 1) {
-            svpn_dtls_process(dec_buf, rcount);
-            continue;
-        }
-
-        get_headers(dec_buf, source_id, dest_id, iv);
+        get_headers(dec_buf, source_id, dest_id);
 
         if (peerlist_get_by_id(source_id, &peer) < 0) {
             fprintf(stderr, "info not found\n");
             continue;
         }
-        memcpy(source, &peer->local_ipv4_addr.s_addr, sizeof(source));
-        memcpy(dest, &peerlist_local.local_ipv4_addr.s_addr, sizeof(source));
 
         rcount -= BUF_OFFSET;
-        rcount = aes_decrypt(dec_buf + BUF_OFFSET, buf,
-                             (unsigned char *)peer->key, iv, rcount);
-        // the translated inner packet goes into buf
-
-        translate_packet(buf, source, dest, rcount);
-
-        translate_mac(buf, opts->mac);
-        if (buf[14] == 0x45) {
-            if (translate_headers(buf, source, dest, rcount) < 0) {
-                fprintf(stderr, "translate error\n");
-                continue;
-            }
-        } else if (buf[14] == 0x60) {
-            // ipv6: nothing to do!
+        memcpy(buf, dec_buf + BUF_OFFSET, rcount);
+        if (buf[14] == 0x45) { // IPv4 Packet
+            // no encryption handling yet
+            translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
+                             (char *)(&peerlist_local.local_ipv4_addr.s_addr),
+                             rcount);
+            translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
+                              (char *)(&peerlist_local.local_ipv4_addr.s_addr),
+                              rcount);
+        } else if (buf[14] == 0x60) { // IPv6 Packet
+            // does nothing
         } else {
             fprintf(stderr, "Warning: unknown IP packet type: 0x%x\n", buf[14]);
+            continue;
         }
-
+        translate_mac(buf, opts->mac);
+        // Write the buffered data back to the TAP device
         if (write(tap, buf, rcount) < 0) {
             fprintf(stderr, "write to tap error\n");
             break;
         }
         printf("T << %d %x %x\n", rcount, buf[32], buf[33]);
-
     }
 
     close(sock4);
@@ -204,15 +185,8 @@ udp_recv_thread(void *data)
     pthread_exit(NULL);
 }
 
-static void *
-dtls_recv_thread(void *data)
-{
-    start_dtls_client(data);
-    pthread_exit(NULL);
-}
-
 static int
-process_inputs(thread_opts_t *opts, char *inputs[], void *data)
+process_inputs(thread_opts_t *opts, char *inputs[])
 {
     char id[ID_SIZE+1] = { 0 };
 
@@ -222,26 +196,15 @@ process_inputs(thread_opts_t *opts, char *inputs[], void *data)
                inputs[1], opts->local_ip4, opts->local_ip6);
     }
     else if (strcmp(inputs[0], "add") == 0) {
-        peerlist_add_p(inputs[1], inputs[2], inputs[3], atoi(inputs[4]),
-                       inputs[5], inputs[6]);
+        peerlist_add_p(inputs[1], inputs[2], inputs[3], atoi(inputs[4]));
         strncpy(id, inputs[1], ID_SIZE);
         struct peer_state *peer;
         peerlist_get_by_id(id, &peer);
         printf("id = %s ip = %s addr = %s\n", id,
                inet_ntoa(*(struct in_addr*)(&peer->local_ipv4_addr)),
                inputs[4]);
-    }
-    else if (strcmp(inputs[0], "dtls") == 0) {
-        if (opts->dtls == 0) {
-            pthread_t *dtls_thread = (pthread_t *) data;
-            strncpy(opts->dtls_ip, inputs[1], 16);
-            opts->dtls_port = atoi(inputs[2]);
-            opts->dtls = 1;
-            pthread_create(dtls_thread, NULL, dtls_recv_thread, opts);
-        }
-        else {
-            fprintf(stderr, "dtls is already active\n");
-        }
+    } else {
+        fprintf(stderr, "Unrecognized Command: '%s'\n", inputs[0]);
     }
     return 0;
 }
@@ -308,8 +271,6 @@ main(int argc, char *argv[])
     opts.sock6 = socket_utils_create_ipv6_udp_socket(
         5800, if_nametoindex("svpn0")
     );
-    opts.dtls = 0;
-    init_dtls(&opts);
 
     // configure the tap device
     tap_set_ipv4_addr(ipv4_addr, 24);
@@ -317,7 +278,6 @@ main(int argc, char *argv[])
     tap_set_mtu(MTU);
     tap_set_base_flags();
     tap_set_up();
-    // cleanup_tap();
     peerlist_set_local_p("nobody", ipv4_addr, ipv6_addr);
 
     // drop root priviledges and set to nobody
@@ -340,12 +300,12 @@ main(int argc, char *argv[])
         }
     }
 
-    pthread_t send_thread, recv_thread, dtls_thread;
+    pthread_t send_thread, recv_thread;
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
 
     char buf[200] = { '0' };
-    char * inputs[7];
+    char * inputs[5];
     int i, j;
 
     while (fgets(buf, sizeof(buf), stdin) != NULL) {
@@ -364,7 +324,7 @@ main(int argc, char *argv[])
             }
             i++;
         }
-        process_inputs(&opts, inputs, &dtls_thread);
+        process_inputs(&opts, inputs);
     }
     return 0;
 }
