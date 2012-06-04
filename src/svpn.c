@@ -349,8 +349,6 @@ main(int argc, char *argv[])
     int i, j;
 
     while (fgets(buf, sizeof(buf), stdin) != NULL) {
-        printf("fgets %s", buf);
-
         // trim newline
         buf[strlen(buf)-1] = ' ';
 
