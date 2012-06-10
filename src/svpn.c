@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <linux/limits.h>
 #include <pwd.h>
 
 #include <jansson.h>
@@ -82,8 +83,9 @@ main_help(const char *executable)
     printf("    -h, --help:    Show this help message.\n");
     printf("    -c, --config:  Give the relative path to the configuration\n"
            "                   json file to use. (default: 'config.json')\n");
-    printf("    -i, --id:      The name (id) to give to the local peer.\n"
-           "                   (default: 'local')\n");
+    printf("    -i, --id:      The name (id) to give to the local peer. Max\n"
+           "                   length of %d characters. (default: 'local')",
+                               ID_SIZE-1);
     printf("    -6:            The virtual IPv6 address to use on the tap\n"
            "                   device. Must begin with 'fd50:0dbc:41f2:4a3c'.\n"
            "                   (default: randomly generated)\n");
@@ -91,8 +93,9 @@ main_help(const char *executable)
            "                   packet data. (default: 5800)\n");
     printf("    -t, --tap:     The name of the system tap device to use. If\n"
            "                   you're using multiple clients on the same\n"
-           "                   machine, device names must be different\n"
-           "                   (default: 'svpn0')\n");
+           "                   machine, device names must be different. Max\n"
+           "                   length of %d characters. (default: 'svpn0')\n",
+                               IFNAMSIZ-1);
     printf("    -v, --verbose: Print out extra information about what's\n"
            "                   happening.\n");
 }
@@ -109,29 +112,35 @@ main_bad_arg(const char *executable, const char* arg)
 int
 main(int argc, char *argv[])
 {
-    srand(time(NULL)); // set up random number generator
+    srand(time(NULL)); // set up the random number generator
     
-    // base settings
-    char *configuration_file = "config.json";
-    char *client_id = NULL;
+    // mark the various configurable options as unset or as their defaults
+    // (dependent on how the option must be manipulated)
+    char config_file[PATH_MAX]; strcpy(config_file, "config.json");
+    char client_id[ID_SIZE]; client_id[0] = '\0';
     char ipv6_addr[8*5]; ipv6_addr[0] = '\0';
+    char *ipv4_addr = "172.31.0.100"; // this isn't really setable ... yet
     uint16_t port = 0;
-    char *tap_device_name = NULL;
+    char tap_device_name[IFNAMSIZ]; tap_device_name[0] = '\0';
     int verbose = 0;
+
+    // Ideally we'd define defaults first, then configuration file stuff, then
+    // command-line arguments, but unfortunately the configuration file can be
+    // set in the arguments, so they must be parsed first.
 
     // read in settings from command line arguments
     for (int i = 1; i < argc; i++) {
         char *a = argv[i];
         if (strcmp(a, "-c") == 0 || strcmp(a, "--config") == 0) {
-            if (++i < argc) {
-                configuration_file = argv[i];
+            if (++i < argc && strlen(argv[i]) < sizeof(config_file)) {
+                strcpy(config_file, argv[i]);
             } else BAD_ARG
         } else if (strcmp(a, "-i") == 0 || strcmp(a, "--id") == 0) {
-            if (++i < argc) {
-                client_id = argv[i];
+            if (++i < argc && strlen(argv[i]) < sizeof(client_id)) {
+                strcpy(client_id, argv[i]);
             } else BAD_ARG
         } else if (strcmp(a, "-6") == 0) {
-            if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)/sizeof(char)){
+            if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)) {
                 strcpy(ipv6_addr, argv[i]);
             } else BAD_ARG
         } else if (strcmp(a, "-p") == 0 || strcmp(a, "--port") == 0) {
@@ -139,8 +148,8 @@ main(int argc, char *argv[])
                 port = (uint16_t) atoi(argv[i]);
             } else BAD_ARG
         } else if (strcmp(a, "-t") == 0 || strcmp(a, "--tap") == 0) {
-            if (++i < argc) {
-                tap_device_name = argv[i];
+            if (++i < argc && strlen(argv[i]) < sizeof(tap_device_name)) {
+                strcpy(tap_device_name, argv[i]);
             } else BAD_ARG
         } else if (strcmp(a, "-v") == 0 || strcmp(a, "--verbose") == 0) {
             verbose = 1;
@@ -149,20 +158,75 @@ main(int argc, char *argv[])
             return 0;
         } else BAD_ARG
     }
-
-    char *ipv4_addr = "172.31.0.100";
-
+    
+    
+    json_t *config_json = NULL;
+    // read in settings from the json config file
+    if (access(config_file, R_OK) == 0) {
+        json_error_t config_json_err;
+        config_json = json_load_file(config_file, 0, &config_json_err);
+        if (config_json == NULL) {
+            fprintf(stderr, "JSON Error: %s (%d, %d) %s: %s", config_file,
+                    config_json_err.line, config_json_err.column,
+                    config_json_err.source, config_json_err.text);
+        } else {
+            if (client_id[0] == '\0') {
+                json_t *id_json = json_object_get(config_json, "id");
+                if (id_json != NULL) {
+                    const char *str = json_string_value(id_json);
+                    if (str != NULL) {
+                        strncpy(client_id, str, sizeof(client_id)-1);
+                        client_id[sizeof(client_id)-1] = '\0';
+                    }
+                }
+            }
+            if (ipv6_addr[0] == '\0') {
+                json_t *ipv6_addr_json =
+                    json_object_get(config_json, "ipv6_addr");
+                if (ipv6_addr_json != NULL) {
+                    const char *str = json_string_value(ipv6_addr_json);
+                    if (str != NULL) {
+                        strncpy(ipv6_addr, str, sizeof(ipv6_addr)-1);
+                        ipv6_addr[sizeof(ipv6_addr)-1] = '\0';
+                    }
+                }
+            }
+            if (port == 0) {
+                json_t *port_json = json_object_get(config_json, "port");
+                if (port_json != NULL) {
+                    port = (uint16_t) json_integer_value(port_json);
+                    // gives 0 on error, which (fortunately) is what we want
+                }
+            }
+            if (tap_device_name[0] == '\0') {
+                json_t *tap_device_name_json =
+                    json_object_get(config_json, "tap_name");
+                if (tap_device_name_json != NULL) {
+                    const char *str = json_string_value(tap_device_name_json);
+                    if (str != NULL) {
+                        strncpy(tap_device_name, str, sizeof(tap_device_name));
+                        tap_device_name[sizeof(tap_device_name)-1] = '\0';
+                    }
+                }
+            }
+        }
+    } else if (verbose) {
+        fprintf(stderr,
+                "Warning: Configuration file '%s' not found or not openable.\n",
+                config_file);
+    }
+     
     // set uninitialized values to their defaults
-    if (client_id == NULL) {
+    if (client_id[0] == '\0') {
         fprintf(stderr, "Warning: An id was not explicitly set. Falling back "
                         "to 'local'. If no id is set, collisions are likely to "
                         "occur.\n");
-        client_id = "local";
+        strcpy(client_id, "local");
     }
     if (ipv6_addr[0] == '\0')
         generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
     if (port == 0) port = 5800;
-    if (tap_device_name == NULL) tap_device_name = "svpn0";
+    if (tap_device_name[0] == '\0') strcpy(tap_device_name, "svpn0");
 
     if (verbose) {
         // pretty-print the client configuration
@@ -173,9 +237,17 @@ main(int argc, char *argv[])
         printf("    TAP Virtual Device Name: '%s'\n", tap_device_name);
     }
 
-    thread_opts_t opts;
+    // Initialize the peerlist for possible peers we might add
+    // This can only be done after we're sure we resolved the ipv4 and ipv6
+    // addresses, but it must be done before we add any peers
     peerlist_init(TABLE_SIZE);
+    peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
+    
+    // we're completely done with the json, so we can free it
+    if (config_json != NULL) json_decref(config_json);
 
+    // write out the threading options to be passed to the runner threads
+    thread_opts_t opts;
     opts.tap = tap_open(tap_device_name, opts.mac);
     opts.local_ip4 = ipv4_addr;
     opts.local_ip6 = ipv6_addr;
@@ -190,7 +262,6 @@ main(int argc, char *argv[])
     tap_set_mtu(MTU);
     tap_set_base_flags();
     tap_set_up();
-    peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
 
     // drop root privileges and set to nobody
     // I need to add chroot jail in here later
