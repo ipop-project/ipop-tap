@@ -3,7 +3,7 @@
 CC=gcc
 CFLAGS=-Wall --std=gnu99
 CFLAGS_DEPLOY=-O3
-CFLAGS_DEBUG=-g -O0 # Include debug symbols. Also valgrind recommends -O0
+CFLAGS_DEBUG=-g -O0 -D DEBUG # Include debug symbols, disable optimizations, etc
 SRC_DIR=src
 STATIC_LIB_DIR=lib# root directory of statically linked libraries
 BIN_DIR=bin
@@ -28,6 +28,3 @@ clean:
 init: clean
 	mkdir -p bin
 	cp certs/* bin
-
-exec:
-	cd bin; ./svpn

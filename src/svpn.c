@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <pwd.h>
 
+#include <jansson.h>
+
 #include <translator.h>
 #include <peerlist.h>
 #include <tap.h>
@@ -70,41 +72,116 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
 }
 
 static void
-get_ipv6_address(char *address) {
-    FILE* fd;
-    if ((fd = fopen(IPV6_ADDR_FILE, "r")) == NULL) {
-        generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, address);
-        if ((fd = fopen(IPV6_ADDR_FILE, "w")) == NULL) {
-            fprintf(stderr, "Could not write ip address back to file\n");
-        } else {
-            fputs(address, fd);
-            fclose(fd);
-        }
-    } else {
-        fgets(address, 40, fd);
-        if (address[strlen(address)-1] == '\n') {
-            address[strlen(address)-1] = '\0'; // strip newline
-        }
-        fclose(fd);
-    }
+main_help(const char *executable)
+{
+    printf("Usage: %s [-h, --help] [-c|--config path] [-i|--id name]\n"
+           "       [-6 ipv6_address] [-p|--port udp_port]\n"
+           "       [-t|--tap device_name] [-v|--verbose]\n\n", executable);
+
+    printf("Arguments:\n");
+    printf("    -h, --help:    Show this help message.\n");
+    printf("    -c, --config:  Give the relative path to the configuration\n"
+           "                   json file to use. (default: 'config.json')\n");
+    printf("    -i, --id:      The name (id) to give to the local peer.\n"
+           "                   (default: 'local')\n");
+    printf("    -6:            The virtual IPv6 address to use on the tap\n"
+           "                   device. Must begin with 'fd50:0dbc:41f2:4a3c'.\n"
+           "                   (default: randomly generated)\n");
+    printf("    -p, --port:    The UDP port used by svpn to send and receive\n"
+           "                   packet data. (default: 5800)\n");
+    printf("    -t, --tap:     The name of the system tap device to use. If\n"
+           "                   you're using multiple clients on the same\n"
+           "                   machine, device names must be different\n"
+           "                   (default: 'svpn0')\n");
+    printf("    -v, --verbose: Print out extra information about what's\n"
+           "                   happening.\n");
 }
+
+static void
+main_bad_arg(const char *executable, const char* arg)
+{
+    fprintf(stderr, "Bad argument: '%s'\n", arg);
+    main_help(executable);
+}
+
+#define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
 
 int
 main(int argc, char *argv[])
 {
-    char* ipv4_addr = "172.31.0.100";
     srand(time(NULL)); // set up random number generator
-    char ipv6_addr[8*5];
-    get_ipv6_address(ipv6_addr);
+    
+    // base settings
+    char *configuration_file = "config.json";
+    char *client_id = NULL;
+    char ipv6_addr[8*5]; ipv6_addr[0] = '\0';
+    uint16_t port = 0;
+    char *tap_device_name = NULL;
+    int verbose = 0;
+
+    // read in settings from command line arguments
+    for (int i = 1; i < argc; i++) {
+        char *a = argv[i];
+        if (strcmp(a, "-c") == 0 || strcmp(a, "--config") == 0) {
+            if (++i < argc) {
+                configuration_file = argv[i];
+            } else BAD_ARG
+        } else if (strcmp(a, "-i") == 0 || strcmp(a, "--id") == 0) {
+            if (++i < argc) {
+                client_id = argv[i];
+            } else BAD_ARG
+        } else if (strcmp(a, "-6") == 0) {
+            if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)/sizeof(char)){
+                strcpy(ipv6_addr, argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-p") == 0 || strcmp(a, "--port") == 0) {
+            if (++i < argc) {
+                port = (uint16_t) atoi(argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-t") == 0 || strcmp(a, "--tap") == 0) {
+            if (++i < argc) {
+                tap_device_name = argv[i];
+            } else BAD_ARG
+        } else if (strcmp(a, "-v") == 0 || strcmp(a, "--verbose") == 0) {
+            verbose = 1;
+        } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
+            main_help(argv[0]);
+            return 0;
+        } else BAD_ARG
+    }
+
+    char *ipv4_addr = "172.31.0.100";
+
+    // set uninitialized values to their defaults
+    if (client_id == NULL) {
+        fprintf(stderr, "Warning: An id was not explicitly set. Falling back "
+                        "to 'local'. If no id is set, collisions are likely to "
+                        "occur.\n");
+        client_id = "local";
+    }
+    if (ipv6_addr[0] == '\0')
+        generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
+    if (port == 0) port = 5800;
+    if (tap_device_name == NULL) tap_device_name = "svpn0";
+
+    if (verbose) {
+        // pretty-print the client configuration
+        printf("Configuration Loaded:\n");
+        printf("    Id: '%s'\n", client_id);
+        printf("    Virtual IPv6 Address: '%s'\n", ipv6_addr);
+        printf("    UDP Socket Port: %d\n", port);
+        printf("    TAP Virtual Device Name: '%s'\n", tap_device_name);
+    }
+
     thread_opts_t opts;
     peerlist_init(TABLE_SIZE);
 
-    opts.tap = tap_open("svpn0", opts.mac);
+    opts.tap = tap_open(tap_device_name, opts.mac);
     opts.local_ip4 = ipv4_addr;
     opts.local_ip6 = ipv6_addr;
-    opts.sock4 = socket_utils_create_ipv4_udp_socket(5800);
+    opts.sock4 = socket_utils_create_ipv4_udp_socket(port);
     opts.sock6 = socket_utils_create_ipv6_udp_socket(
-        5800, if_nametoindex("svpn0")
+        port, if_nametoindex(tap_device_name)
     );
 
     // configure the tap device
@@ -113,9 +190,9 @@ main(int argc, char *argv[])
     tap_set_mtu(MTU);
     tap_set_base_flags();
     tap_set_up();
-    peerlist_set_local_p("nobody", ipv4_addr, ipv6_addr);
+    peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
 
-    // drop root priviledges and set to nobody
+    // drop root privileges and set to nobody
     // I need to add chroot jail in here later
     struct passwd * pwd = getpwnam("nobody");
     if (getuid() == 0) {
@@ -163,3 +240,5 @@ main(int argc, char *argv[])
     }
     return 0;
 }
+
+#undef BAD_ARG
