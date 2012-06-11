@@ -101,7 +101,7 @@ peerlist_set_local(const char *_local_id,
     memcpy(&local_ipv6_addr, _local_ipv6_addr, sizeof(struct in6_addr));
     struct in_addr dest_ipv4_addr;
     unsigned char dest_ipv4_addr_c[] = {127, 0, 0, 1};
-    dest_ipv4_addr.s_addr = *(unsigned long *)(dest_ipv4_addr_c);
+    memcpy(&dest_ipv4_addr.s_addr, dest_ipv4_addr_c, sizeof(unsigned long));
 
     // initialize the local peer struct
     strcpy(peerlist_local.id, local_id);

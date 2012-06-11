@@ -23,8 +23,16 @@
 #include <packetio.h>
 #include <svpn.h>
 
+static int process_inputs(thread_opts_t *opts, char *inputs[]);
+static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
+                                 char *address);
+static int add_peer_json(json_t *peer_json);
+static void main_help(const char *executable);
+static void main_bad_arg(const char *executable, const char *arg);
+int main(int argc, const char **argv);
+
 static int
-process_inputs(thread_opts_t *opts, char *inputs[])
+process_inputs(thread_opts_t *opts, char **inputs)
 {
     char id[ID_SIZE+1] = { 0 };
 
@@ -140,10 +148,10 @@ main_bad_arg(const char *executable, const char* arg)
 #define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
 
 int
-main(int argc, char *argv[])
+main(int argc, const char *argv[])
 {
     srand(time(NULL)); // set up the random number generator
-    
+
     // mark the various configurable options as unset or as their defaults
     // (dependent on how the option must be manipulated)
     char config_file[PATH_MAX]; strcpy(config_file, "config.json");
@@ -160,7 +168,7 @@ main(int argc, char *argv[])
 
     // read in settings from command line arguments
     for (int i = 1; i < argc; i++) {
-        char *a = argv[i];
+        const char *a = argv[i];
         if (strcmp(a, "-c") == 0 || strcmp(a, "--config") == 0) {
             if (++i < argc && strlen(argv[i]) < sizeof(config_file)) {
                 strcpy(config_file, argv[i]);
@@ -188,8 +196,8 @@ main(int argc, char *argv[])
             return 0;
         } else BAD_ARG
     }
-    
-    
+
+
     json_t *config_json = NULL;
     // read in settings from the json config file
     if (access(config_file, R_OK) == 0) {
@@ -246,7 +254,7 @@ main(int argc, char *argv[])
                 "Warning: Configuration file '%s' not found or not openable.\n",
                 config_file);
     }
-     
+
     // set uninitialized values to their defaults
     if (client_id[0] == '\0') {
         fprintf(stderr, "Warning: An id was not explicitly set. Falling back "
@@ -273,7 +281,7 @@ main(int argc, char *argv[])
     // addresses, but it must be done before we add any peers
     peerlist_init(TABLE_SIZE);
     peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
-    
+
     if (json_is_object(config_json)) {
         json_t *peerlist_json = json_object_get(config_json, "peers");
         if (json_is_array(peerlist_json)) {

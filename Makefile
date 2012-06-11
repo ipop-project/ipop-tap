@@ -17,7 +17,7 @@ CC_BUILD=$(CC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \
 all: build
 
 build: init
-	$(CC_BUILD)
+	$(CC_BUILD) $(CFLAGS_DEPLOY)
 
 debug: init
 	$(CC_BUILD) $(CFLAGS_DEBUG)
