@@ -122,8 +122,13 @@ main_help(const char *executable)
     printf("    -c, --config:  Give the relative path to the configuration\n"
            "                   json file to use. (default: 'config.json')\n");
     printf("    -i, --id:      The name (id) to give to the local peer. Max\n"
-           "                   length of %d characters. (default: 'local')",
+           "                   length of %d characters. (default: 'local')\n",
                                ID_SIZE-1);
+    printf("    -4:            The virtual IPv4 address to use on the tap.\n"
+           "                   This represents the localhost, and all other\n"
+           "                   peers are given an IP derived by adding to\n"
+           "                   this. The last block must be a 3-digit number,\n"
+           "                   such as '100'. (default: '172.31.0.100')\n");
     printf("    -6:            The virtual IPv6 address to use on the tap\n"
            "                   device. Must begin with 'fd50:0dbc:41f2:4a3c'.\n"
            "                   (default: randomly generated)\n");
@@ -156,8 +161,8 @@ main(int argc, const char *argv[])
     // (dependent on how the option must be manipulated)
     char config_file[PATH_MAX]; strcpy(config_file, "config.json");
     char client_id[ID_SIZE]; client_id[0] = '\0';
+    char ipv4_addr[4*4]; ipv4_addr[0] = '\0';
     char ipv6_addr[8*5]; ipv6_addr[0] = '\0';
-    char *ipv4_addr = "172.31.0.100"; // this isn't really setable ... yet
     uint16_t port = 0;
     char tap_device_name[IFNAMSIZ]; tap_device_name[0] = '\0';
     int verbose = 0;
@@ -176,6 +181,10 @@ main(int argc, const char *argv[])
         } else if (strcmp(a, "-i") == 0 || strcmp(a, "--id") == 0) {
             if (++i < argc && strlen(argv[i]) < sizeof(client_id)) {
                 strcpy(client_id, argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-4") == 0) {
+            if (++i < argc && strlen(argv[i]) < sizeof(ipv4_addr)) {
+                strcpy(ipv4_addr, argv[i]);
             } else BAD_ARG
         } else if (strcmp(a, "-6") == 0) {
             if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)) {
@@ -216,6 +225,17 @@ main(int argc, const char *argv[])
                     if (str != NULL) {
                         strncpy(client_id, str, sizeof(client_id)-1);
                         client_id[sizeof(client_id)-1] = '\0';
+                    }
+                }
+            }
+            if (ipv4_addr[0] == '\0') {
+                json_t *ipv4_addr_json =
+                    json_object_get(config_json, "ipv4_addr");
+                if (ipv4_addr_json != NULL) {
+                    const char *str = json_string_value(ipv4_addr_json);
+                    if (str != NULL) {
+                        strncpy(ipv4_addr, str, sizeof(ipv4_addr)-1);
+                        ipv4_addr[sizeof(ipv4_addr)-1] = '\0';
                     }
                 }
             }
@@ -264,6 +284,7 @@ main(int argc, const char *argv[])
     }
     if (ipv6_addr[0] == '\0')
         generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
+    if (ipv4_addr[0] == '\0') strcpy(ipv4_addr, "172.31.0.100");
     if (port == 0) port = 5800;
     if (tap_device_name[0] == '\0') strcpy(tap_device_name, "svpn0");
 
