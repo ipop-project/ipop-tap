@@ -1,222 +1,335 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h> // used to generate random seed
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <net/if.h>
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <linux/limits.h>
 #include <pwd.h>
+
+#include <jansson.h>
 
 #include <translator.h>
 #include <peerlist.h>
 #include <tap.h>
-#include <encryption.h>
 #include <headers.h>
+#include <socket_utils.h>
+#include <packetio.h>
 #include <svpn.h>
 
-typedef struct thread_opts {
-    int sock;
-    int tap;
-    char mac[6];
-    char *local_ip;
-} thread_opts_t;
+static int process_inputs(thread_opts_t *opts, char *inputs[]);
+static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
+                                 char *address);
+static int add_peer_json(json_t *peer_json);
+static void main_help(const char *executable);
+static void main_bad_arg(const char *executable, const char *arg);
+int main(int argc, const char **argv);
 
 static int
-create_udp_socket(uint16_t port)
+process_inputs(thread_opts_t *opts, char **inputs)
 {
-    int sock, optval = 1;
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 1) {
-        fprintf(stderr, "socket failed\n");
-        return -1;
-    }
-
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-
-    memset(&addr, 0, addr_len);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
-        fprintf(stderr, "bind failed\n");
-        close(sock);
-        return -1;
-    }
-    return sock;
-}
-
-static void *
-udp_send_thread(void *data)
-{
-    thread_opts_t *opts = (thread_opts_t *) data;
-    int sock = opts->sock;
-    int tap = opts->tap;
-
-    int rcount;
-    struct sockaddr_in addr;
-    socklen_t addrlen = sizeof(addr);
-
-    unsigned char buf[BUFLEN];
-    unsigned char enc_buf[BUFLEN];
-    unsigned char key[KEY_SIZE] = { 0 };
-    unsigned char iv[KEY_SIZE] = { 0 };
-    char source_id[ID_SIZE] = { 0 };
-    char dest_id[ID_SIZE] = { 0 };
-    int idx;
-
-    while (1) {
-
-        idx = 0;
-        if ((rcount = read(tap, buf, BUFLEN)) < 0) {
-            fprintf(stderr, "tap read failed\n");
-            break;
-        }
-
-        printf("T >> %d %x %x\n", rcount, buf[32], buf[33]);
-
-        if (buf[12] == 0x08 && buf[13] == 0x06 && create_arp_response(buf)) {
-            write(tap, buf, rcount);
-            continue;
-        }
-
-        while (get_dest_info((char *)buf + 30, source_id, dest_id, &addr, 
-            (char *)key, &idx) >= 0) {
-
-            translate_packet(buf, NULL, NULL, rcount);
-
-            set_headers(enc_buf, source_id, dest_id, iv);
-            rcount = aes_encrypt(buf, enc_buf + BUF_OFFSET, key, iv,
-                rcount);
-
-            rcount += BUF_OFFSET;
-
-            if (sendto(sock, enc_buf, rcount, 0, (struct sockaddr*) &addr, 
-                addrlen) < 0) {
-                fprintf(stderr, "sendto failed\n");
-            }
-
-            printf("S >> %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
-
-            if (idx++ == -1) break;
-        }
-    }
-
-    close(sock);
-    close(tap);
-    pthread_exit(NULL);
-}
-
-static void *
-udp_recv_thread(void *data)
-{
-    thread_opts_t *opts = (thread_opts_t *) data;
-    int sock = opts->sock;
-    int tap = opts->tap;
-
-    int rcount;
-    struct sockaddr_in addr;
-    socklen_t addrlen = sizeof(addr);
-
-    unsigned char buf[BUFLEN];
-    unsigned char dec_buf[BUFLEN];
-    unsigned char key[KEY_SIZE] = { 0 };
-    unsigned char iv[KEY_SIZE] = { 0 };
-    char source_id[KEY_SIZE] = { 0 };
-    char dest_id[KEY_SIZE] = { 0 };
-    char source[4];
-    char dest[4];
-
-    while (1) {
-
-        if ((rcount = recvfrom(sock, dec_buf, BUFLEN, 0, 
-               (struct sockaddr*) &addr, &addrlen)) < 0) {
-            fprintf(stderr, "upd recv failed\n");
-            break;
-        }
-
-        printf("S << %d %x\n", rcount, (unsigned int)addr.sin_addr.s_addr);
-
-        get_headers(dec_buf, source_id, dest_id, iv);
-
-        if (get_source_info(source_id, source, dest, (char *)key) < 0) {
-            fprintf(stderr, "info not found\n");
-            continue;
-        }
-
-        rcount -= BUF_OFFSET;
-        rcount = aes_decrypt(dec_buf + BUF_OFFSET, buf, key, iv, rcount);
-
-        translate_packet(buf, source, dest, rcount);
-
-        if (translate_headers(buf, source, dest, opts->mac, rcount) < 0) {
-            fprintf(stderr, "translate error\n");
-            continue;
-        }
-
-        if (write(tap, buf, rcount) < 0) {
-            fprintf(stderr, "write to tap error\n");
-            break;
-        }
-        printf("T << %d %x %x\n", rcount, buf[32], buf[33]);
-
-    }
-
-    close(tap);
-    close(sock);
-    pthread_exit(NULL);
-}
-
-static int
-process_inputs(thread_opts_t *opts, char *inputs[])
-{
-    char source[4];
-    char dest[4];
-    char key[KEY_SIZE];
-    char id[ID_SIZE] = { 0 };
+    char id[ID_SIZE+1] = { 0 };
 
     if (strcmp(inputs[0], "setid") == 0) {
-        set_local_peer(inputs[1], opts->local_ip);
-        printf("id = %s ip = %s\n", inputs[1], opts->local_ip);
+        peerlist_set_local_p(inputs[1], opts->local_ip4, opts->local_ip6);
+        printf("id = %s ipv4 = %s ipv6 = %s\n",
+               inputs[1], opts->local_ip4, opts->local_ip6);
     }
     else if (strcmp(inputs[0], "add") == 0) {
-        add_peer(inputs[1], inputs[2], atoi(inputs[3]), inputs[4]);
+        peerlist_add_p(inputs[1], inputs[2], inputs[3], atoi(inputs[4]));
         strncpy(id, inputs[1], ID_SIZE);
-        get_source_info(id, source, dest, key);
-        printf("id = %s ip = %s\n", id, inet_ntoa(*(struct in_addr*)source));
+        struct peer_state *peer;
+        peerlist_get_by_id(id, &peer);
+        printf("id = %s ip = %s addr = %s\n", id,
+               inet_ntoa(*(struct in_addr*)(&peer->local_ipv4_addr)),
+               inputs[4]);
+    } else {
+        fprintf(stderr, "Unrecognized Command: '%s'\n", inputs[0]);
     }
     return 0;
 }
 
-int
-main(int argc, char *argv[])
+/**
+ * Generates a string containing an IPv6 address with the given prefix. Maximum
+ * written string length is 39 characters, and is written to `address`.
+ */
+static int
+generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
 {
-    char ip[] = "172.31.0.100";
-    thread_opts_t opts;
-    opts.sock = create_udp_socket(5800);
-    opts.tap = open_tap("svpn0", opts.mac);
-    opts.local_ip = ip;
-    configure_tap(opts.tap, ip, MTU);
-    set_local_peer("nobody", ip);
+    if (prefix_len % 16) {
+        fprintf(stderr, "Bad prefix_len value. (only multiples of 16 are "
+                        "supported\n");
+        return -1;
+    }
+    unsigned short blocks_left = (128-prefix_len) / 16;
+    strcpy(address, prefix);
+    for (int i = 0; i < blocks_left; i++) {
+        if (blocks_left-i <= 1)
+            // ensure the last block is of constant string length
+            sprintf(&address[strlen(address)], ":%x",
+                    (rand() % (0xEFFF+1)) + 0x1000);
+        else
+            sprintf(&address[strlen(address)], ":%x", rand() % (0xFFFF+1));
+    }
+    return 0;
+}
 
-    // drop root priviledges and set to nobody
+static int
+add_peer_json(json_t* peer_json) {
+    json_t *id_json = json_object_get(peer_json, "id");
+    json_t *ipv4_json = json_object_get(peer_json, "ipv4_addr");
+    json_t *ipv6_json = json_object_get(peer_json, "ipv6_addr");
+    json_t *port_json = json_object_get(peer_json, "port");
+
+    if (id_json == NULL || ipv4_json == NULL || ipv6_json == NULL ||
+                                                            port_json == NULL) {
+        return -1;
+    }
+
+    const char *id = json_string_value(id_json);
+    const char *dest_ipv4 = json_string_value(ipv4_json);
+    const char *dest_ipv6 = json_string_value(ipv6_json);
+    uint16_t port = json_integer_value(port_json);
+
+    if (id == NULL || dest_ipv4 == NULL || dest_ipv6 == NULL || port == 0) {
+        return -1;
+    }
+
+#ifdef DEBUG
+    printf("Added peer with id: %s\n", id);
+#endif
+
+    // peerlist_add does the memcpy of everything for us
+    peerlist_add_p(id, dest_ipv4, dest_ipv6, port);
+    return 0;
+}
+
+static void
+main_help(const char *executable)
+{
+    printf("Usage: %s [-h, --help] [-c|--config path] [-i|--id name]\n"
+           "       [-6 ipv6_address] [-p|--port udp_port]\n"
+           "       [-t|--tap device_name] [-v|--verbose]\n\n", executable);
+
+    printf("Arguments:\n");
+    printf("    -h, --help:    Show this help message.\n");
+    printf("    -c, --config:  Give the relative path to the configuration\n"
+           "                   json file to use. (default: 'config.json')\n");
+    printf("    -i, --id:      The name (id) to give to the local peer. Max\n"
+           "                   length of %d characters. (default: 'local')",
+                               ID_SIZE-1);
+    printf("    -6:            The virtual IPv6 address to use on the tap\n"
+           "                   device. Must begin with 'fd50:0dbc:41f2:4a3c'.\n"
+           "                   (default: randomly generated)\n");
+    printf("    -p, --port:    The UDP port used by svpn to send and receive\n"
+           "                   packet data. (default: 5800)\n");
+    printf("    -t, --tap:     The name of the system tap device to use. If\n"
+           "                   you're using multiple clients on the same\n"
+           "                   machine, device names must be different. Max\n"
+           "                   length of %d characters. (default: 'svpn0')\n",
+                               IFNAMSIZ-1);
+    printf("    -v, --verbose: Print out extra information about what's\n"
+           "                   happening.\n");
+}
+
+static void
+main_bad_arg(const char *executable, const char* arg)
+{
+    fprintf(stderr, "Bad argument: '%s'\n", arg);
+    main_help(executable);
+}
+
+#define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
+
+int
+main(int argc, const char *argv[])
+{
+    srand(time(NULL)); // set up the random number generator
+
+    // mark the various configurable options as unset or as their defaults
+    // (dependent on how the option must be manipulated)
+    char config_file[PATH_MAX]; strcpy(config_file, "config.json");
+    char client_id[ID_SIZE]; client_id[0] = '\0';
+    char ipv6_addr[8*5]; ipv6_addr[0] = '\0';
+    char *ipv4_addr = "172.31.0.100"; // this isn't really setable ... yet
+    uint16_t port = 0;
+    char tap_device_name[IFNAMSIZ]; tap_device_name[0] = '\0';
+    int verbose = 0;
+
+    // Ideally we'd define defaults first, then configuration file stuff, then
+    // command-line arguments, but unfortunately the configuration file can be
+    // set in the arguments, so they must be parsed first.
+
+    // read in settings from command line arguments
+    for (int i = 1; i < argc; i++) {
+        const char *a = argv[i];
+        if (strcmp(a, "-c") == 0 || strcmp(a, "--config") == 0) {
+            if (++i < argc && strlen(argv[i]) < sizeof(config_file)) {
+                strcpy(config_file, argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-i") == 0 || strcmp(a, "--id") == 0) {
+            if (++i < argc && strlen(argv[i]) < sizeof(client_id)) {
+                strcpy(client_id, argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-6") == 0) {
+            if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)) {
+                strcpy(ipv6_addr, argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-p") == 0 || strcmp(a, "--port") == 0) {
+            if (++i < argc) {
+                port = (uint16_t) atoi(argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-t") == 0 || strcmp(a, "--tap") == 0) {
+            if (++i < argc && strlen(argv[i]) < sizeof(tap_device_name)) {
+                strcpy(tap_device_name, argv[i]);
+            } else BAD_ARG
+        } else if (strcmp(a, "-v") == 0 || strcmp(a, "--verbose") == 0) {
+            verbose = 1;
+        } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
+            main_help(argv[0]);
+            return 0;
+        } else BAD_ARG
+    }
+
+
+    json_t *config_json = NULL;
+    // read in settings from the json config file
+    if (access(config_file, R_OK) == 0) {
+        json_error_t config_json_err;
+        config_json = json_load_file(config_file, 0, &config_json_err);
+        if (config_json == NULL) {
+            fprintf(stderr, "JSON Error: %s (%d, %d) %s: %s\n", config_file,
+                    config_json_err.line, config_json_err.column,
+                    config_json_err.source, config_json_err.text);
+            return -1;
+        } else {
+            if (client_id[0] == '\0') {
+                json_t *id_json = json_object_get(config_json, "id");
+                if (id_json != NULL) {
+                    const char *str = json_string_value(id_json);
+                    if (str != NULL) {
+                        strncpy(client_id, str, sizeof(client_id)-1);
+                        client_id[sizeof(client_id)-1] = '\0';
+                    }
+                }
+            }
+            if (ipv6_addr[0] == '\0') {
+                json_t *ipv6_addr_json =
+                    json_object_get(config_json, "ipv6_addr");
+                if (ipv6_addr_json != NULL) {
+                    const char *str = json_string_value(ipv6_addr_json);
+                    if (str != NULL) {
+                        strncpy(ipv6_addr, str, sizeof(ipv6_addr)-1);
+                        ipv6_addr[sizeof(ipv6_addr)-1] = '\0';
+                    }
+                }
+            }
+            if (port == 0) {
+                json_t *port_json = json_object_get(config_json, "port");
+                if (port_json != NULL) {
+                    port = (uint16_t) json_integer_value(port_json);
+                    // gives 0 on error, which (fortunately) is what we want
+                }
+            }
+            if (tap_device_name[0] == '\0') {
+                json_t *tap_device_name_json =
+                    json_object_get(config_json, "tap_name");
+                if (tap_device_name_json != NULL) {
+                    const char *str = json_string_value(tap_device_name_json);
+                    if (str != NULL) {
+                        strncpy(tap_device_name, str, sizeof(tap_device_name));
+                        tap_device_name[sizeof(tap_device_name)-1] = '\0';
+                    }
+                }
+            }
+        }
+    } else if (verbose) {
+        fprintf(stderr,
+                "Warning: Configuration file '%s' not found or not openable.\n",
+                config_file);
+    }
+
+    // set uninitialized values to their defaults
+    if (client_id[0] == '\0') {
+        fprintf(stderr, "Warning: An id was not explicitly set. Falling back "
+                        "to 'local'. If no id is set, collisions are likely to "
+                        "occur.\n");
+        strcpy(client_id, "local");
+    }
+    if (ipv6_addr[0] == '\0')
+        generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
+    if (port == 0) port = 5800;
+    if (tap_device_name[0] == '\0') strcpy(tap_device_name, "svpn0");
+
+    if (verbose) {
+        // pretty-print the client configuration
+        printf("Configuration Loaded:\n");
+        printf("    Id: '%s'\n", client_id);
+        printf("    Virtual IPv6 Address: '%s'\n", ipv6_addr);
+        printf("    UDP Socket Port: %d\n", port);
+        printf("    TAP Virtual Device Name: '%s'\n", tap_device_name);
+    }
+
+    // Initialize the peerlist for possible peers we might add
+    // This can only be done after we're sure we resolved the ipv4 and ipv6
+    // addresses, but it must be done before we add any peers
+    peerlist_init(TABLE_SIZE);
+    peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
+
+    if (json_is_object(config_json)) {
+        json_t *peerlist_json = json_object_get(config_json, "peers");
+        if (json_is_array(peerlist_json)) {
+            for (int i = 0; i < json_array_size(peerlist_json); i++) {
+                json_t *peer_json = json_array_get(peerlist_json, i);
+                add_peer_json(peer_json);
+            }
+        }
+    }
+
+    // we're completely done with the json, so we can free it
+    if (config_json != NULL) {
+        json_decref(config_json);
+    }
+
+    // write out the threading options to be passed to the runner threads
+    thread_opts_t opts;
+    opts.tap = tap_open(tap_device_name, opts.mac);
+    opts.local_ip4 = ipv4_addr;
+    opts.local_ip6 = ipv6_addr;
+    opts.sock4 = socket_utils_create_ipv4_udp_socket(port);
+    opts.sock6 = socket_utils_create_ipv6_udp_socket(
+        port, if_nametoindex(tap_device_name)
+    );
+
+    // configure the tap device
+    tap_set_ipv4_addr(ipv4_addr, 24);
+    tap_set_ipv6_addr(ipv6_addr, 64);
+    tap_set_mtu(MTU);
+    tap_set_base_flags();
+    tap_set_up();
+
+    // drop root privileges and set to nobody
+    // I need to add chroot jail in here later
     struct passwd * pwd = getpwnam("nobody");
     if (getuid() == 0) {
         if (setgid(pwd->pw_uid) < 0) {
             fprintf(stderr, "setgid failed\n");
-            close(opts.tap);
-            close(opts.sock);
+            close(opts.sock4);
+            close(opts.sock6);
+            tap_close();
             return -1;
         }
         if (setuid(pwd->pw_gid) < 0) {
             fprintf(stderr, "setuid failed\n");
-            close(opts.tap);
-            close(opts.sock);
+            close(opts.sock4);
+            close(opts.sock6);
+            tap_close();
             return -1;
         }
     }
@@ -225,29 +338,29 @@ main(int argc, char *argv[])
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
 
-    char buf[50] = { '0' };
+    char buf[200] = { '0' };
     char * inputs[5];
     int i, j;
 
     while (fgets(buf, sizeof(buf), stdin) != NULL) {
-        printf("fgets %s", buf);
-
         // trim newline
         buf[strlen(buf)-1] = ' ';
 
         i = j = 0;
         inputs[j++] = buf + i;
 
-        while (buf[i] != '\0' && i < sizeof(buf)) {
+        while (buf[i] != '\0' && i < sizeof(buf)/sizeof(char)) {
             if (buf[i] == ' ') {
                 buf[i] = '\0';
                 inputs[j++] = buf + i + 1;
 
-                if (j == 5) break;
+                if (j == sizeof(inputs)/sizeof(char *)) break;
             }
             i++;
         }
         process_inputs(&opts, inputs);
     }
+    return 0;
 }
 
+#undef BAD_ARG
