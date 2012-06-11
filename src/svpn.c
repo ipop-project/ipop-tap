@@ -72,6 +72,36 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
     return 0;
 }
 
+static int
+add_peer_json(json_t* peer_json) {
+    json_t *id_json = json_object_get(peer_json, "id");
+    json_t *ipv4_json = json_object_get(peer_json, "ipv4_addr");
+    json_t *ipv6_json = json_object_get(peer_json, "ipv6_addr");
+    json_t *port_json = json_object_get(peer_json, "port");
+
+    if (id_json == NULL || ipv4_json == NULL || ipv6_json == NULL ||
+                                                            port_json == NULL) {
+        return -1;
+    }
+
+    const char *id = json_string_value(id_json);
+    const char *dest_ipv4 = json_string_value(ipv4_json);
+    const char *dest_ipv6 = json_string_value(ipv6_json);
+    uint16_t port = json_integer_value(port_json);
+
+    if (id == NULL || dest_ipv4 == NULL || dest_ipv6 == NULL || port == 0) {
+        return -1;
+    }
+
+#ifdef DEBUG
+    printf("Added peer with id: %s\n", id);
+#endif
+
+    // peerlist_add does the memcpy of everything for us
+    peerlist_add_p(id, dest_ipv4, dest_ipv6, port);
+    return 0;
+}
+
 static void
 main_help(const char *executable)
 {
@@ -166,9 +196,10 @@ main(int argc, char *argv[])
         json_error_t config_json_err;
         config_json = json_load_file(config_file, 0, &config_json_err);
         if (config_json == NULL) {
-            fprintf(stderr, "JSON Error: %s (%d, %d) %s: %s", config_file,
+            fprintf(stderr, "JSON Error: %s (%d, %d) %s: %s\n", config_file,
                     config_json_err.line, config_json_err.column,
                     config_json_err.source, config_json_err.text);
+            return -1;
         } else {
             if (client_id[0] == '\0') {
                 json_t *id_json = json_object_get(config_json, "id");
@@ -243,8 +274,20 @@ main(int argc, char *argv[])
     peerlist_init(TABLE_SIZE);
     peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
     
+    if (json_is_object(config_json)) {
+        json_t *peerlist_json = json_object_get(config_json, "peers");
+        if (json_is_array(peerlist_json)) {
+            for (int i = 0; i < json_array_size(peerlist_json); i++) {
+                json_t *peer_json = json_array_get(peerlist_json, i);
+                add_peer_json(peer_json);
+            }
+        }
+    }
+
     // we're completely done with the json, so we can free it
-    if (config_json != NULL) json_decref(config_json);
+    if (config_json != NULL) {
+        json_decref(config_json);
+    }
 
     // write out the threading options to be passed to the runner threads
     thread_opts_t opts;
