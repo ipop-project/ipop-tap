@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <endian.h>
+#include <linux/limits.h> // provides PATH_MAX
 
 struct in6_addr base_addr;
 char *base_addr_p, *racoon_conf_path;
@@ -100,8 +101,8 @@ main(int argc, const char **argv)
     racoon_cleanup(); // we don't really care if initial cleanup fails
     racoon_init();
     // argv[4] should be the location of our private keyfile
-    privkeyfile_path = malloc(strlen(argv[4]) + 1);
-    strcpy(privkeyfile_path, argv[4]);
+    privkeyfile_path = malloc(PATH_MAX + 1);
+    realpath(argv[4], privkeyfile_path);
 
     // Catch a ctrl+c at least letting us clean up racoon.conf
     struct sigaction signal_handler_action;
@@ -216,8 +217,13 @@ command_add_peer(const char *addr_p, const char *pubkeyfile_path)
     strcpy(peer.address_p, addr_p);
     memcpy(&(peer.address), &addr, sizeof(struct in6_addr));
     
-    peer.pubkeyfile_path = malloc((strlen(pubkeyfile_path) + 1) * sizeof(char));
-    strcpy(peer.pubkeyfile_path, pubkeyfile_path);
+    // peer.pubkeyfile_path = malloc(strlen(pubkeyfile_path) + 1);
+    peer.pubkeyfile_path = malloc(PATH_MAX + 1);
+    if (realpath(pubkeyfile_path, peer.pubkeyfile_path) == NULL) {
+        free(peer.pubkeyfile_path);
+        printf("fail Could not expand relative public key path.");
+        return;
+    }
     
     racoon_peerlist[racoon_peerlist_len++] = peer;
     
@@ -379,7 +385,9 @@ racoon_ctl(const char *command)
     // TODO: Actually open the unix socket connection ourselves and do this
     char command_system[strlen(command) + strlen("racoonctl ") + 1];
     sprintf(command_system, "racoonctl %s", command);
-    return system(command_system);
+    system(command_system);
+    return 0; // normally we'd return the system return code, but the version of
+              // racoonctl in debian squeeze seems to give back 1 no matter what
 }
 
 int
@@ -396,8 +404,8 @@ racoon_update()
     for (int i = 0; i < racoon_peerlist_len; i++) {
         struct racoon_peer *peer = &racoon_peerlist[i];
         fprintf(racoon_conf,
-            "remote \"%s\" {\n"
-            "    remote_address %s;\n"
+            "remote %s {\n"
+            "    # remote_address %s;\n"
             "    nat_traversal off;\n" // svpn does this for us
             "    exchange_mode aggressive;\n" // The documentation is vague here
             "    my_identifier address;\n"    // Use the address for their id
@@ -417,7 +425,7 @@ racoon_update()
         );
         // write sainfo here
         fprintf(racoon_conf,
-            "sainfo address %s[%d] address %s[%d] {\n"
+            "sainfo (address %s[%d] any address %s[%d] any) {\n"
             "    lifetime time 1 hour;\n" // reauthenticate each hour
             "    authentication_algorithm hmac_sha1;\n"
             "    encryption_algorithm aes;\n"
