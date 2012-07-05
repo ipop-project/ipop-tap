@@ -13,7 +13,7 @@
  *     http://www.netbsd.org/docs/network/ipsec/rasvpn.html
  *     http://qnx.com/developers/docs/6.4.1/neutrino/utilities/r/racoon.conf
  *     http://www.kame.net/racoon/racoon.conf.5
- * 
+ *
  * In addtion to the racoon.conf file, we also use a combination of setkey and
  * racoonctl (forked into subprocesses) to do some of our dirty work for us.
  */
@@ -60,10 +60,12 @@ void command_add_peer(const char *addr_p, const char *pubkeyfile_path);
 int verify_ipv6_addr(const char *input);
 int verify_path(const char *input);
 int setkey_associate(const char *addr_p);
+int setkey_disassociate(const char *addr_p);
 int racoon_init();
 int racoon_cleanup();
 int racoon_ctl(const char *command);
 int racoon_update();
+void main_exit();
 void main_signal_handler(int signal);
 
 /**
@@ -118,7 +120,7 @@ main(int argc, const char **argv)
     //    command_name optional_arg optional_arg optional_arg
     // As the parser is really dumb, multiple spaces will create empty
     // arguments. Also, there is no way of escaping spaces, sorry!
-    // 
+    //
     // Every command should give out one line of output, beginning with "pass"
     // or "fail". The text after "fail" will give an human-readable
     // explaination. The text after pass (if there is any) will be space
@@ -155,28 +157,37 @@ main(int argc, const char **argv)
             printf("fail Bad command or argument count for '%s' (%d args)\n",
                    command, command_argc);
     }
-    
+
 #ifdef DEBUG
     printf("debug Got EOF or error. Exiting.\n");
 #endif
+    
+    main_exit();
+    return 0;
+}
 
-    // cleanup and exit
+void
+main_exit()
+{
+    // cleanup in preparation for exit
     racoon_cleanup();
+    racoon_ctl("reload-config");
     for (int i = 0; i < racoon_peerlist_len; i++) {
+        setkey_disassociate(racoon_peerlist[i].address_p);
         free(racoon_peerlist[i].pubkeyfile_path);
     }
     free(base_addr_p);
     free(racoon_conf_path);
     free(privkeyfile_path);
-    return 0;
 }
 
 void
-main_signal_handler(int signal) {
+main_signal_handler(int signal)
+{
 #ifdef DEBUG
     printf("debug Caught signal %d. Exiting.\n", signal);
 #endif
-    racoon_cleanup();
+    main_exit();
     exit(1);
 }
 
@@ -216,7 +227,7 @@ command_add_peer(const char *addr_p, const char *pubkeyfile_path)
     struct racoon_peer peer;
     strcpy(peer.address_p, addr_p);
     memcpy(&(peer.address), &addr, sizeof(struct in6_addr));
-    
+
     // peer.pubkeyfile_path = malloc(strlen(pubkeyfile_path) + 1);
     peer.pubkeyfile_path = malloc(PATH_MAX + 1);
     if (realpath(pubkeyfile_path, peer.pubkeyfile_path) == NULL) {
@@ -224,9 +235,9 @@ command_add_peer(const char *addr_p, const char *pubkeyfile_path)
         printf("fail Could not expand relative public key path.");
         return;
     }
-    
+
     racoon_peerlist[racoon_peerlist_len++] = peer;
-    
+
     // write the changes to the peerlist out
     if (racoon_update() != 0) {
         printf("fail Update of racoon configuration file failed.\n");
@@ -309,8 +320,8 @@ verify_ipv6_addr(const char *input)
     return 1; // no tests failed: we should be good.
 }
 
-int
-setkey_associate(const char *addr_p)
+static int
+setkey_spd(const char *subcommand, const char *addr_p)
 {
     // forks setkey, writes commands to stdin, kills setkey
     FILE *setkey_pipe = popen("setkey -c > /dev/null", "w");
@@ -319,16 +330,28 @@ setkey_associate(const char *addr_p)
 #endif
     if (setkey_pipe == NULL) return -1;
     fprintf(setkey_pipe,
-            "spdadd %s %s any -P out ipsec esp/transport//require;\n",
-            base_addr_p, addr_p);
+            "spd%s %s %s any -P out ipsec esp/transport//require;\n",
+            subcommand, base_addr_p, addr_p);
     fprintf(setkey_pipe,
-            "spdadd %s %s any -P in ipsec esp/transport//require;\n",
-            addr_p, base_addr_p);
+            "spd%s %s %s any -P in ipsec esp/transport//require;\n",
+            subcommand, addr_p, base_addr_p);
 #ifdef DEBUG
     printf("debug Wrote commands to setkey.\n");
 #endif
     pclose(setkey_pipe);
     return 0;
+}
+
+int
+setkey_associate(const char *addr_p)
+{
+    return setkey_spd("add", addr_p);
+}
+
+int
+setkey_disassociate(const char *addr_p)
+{
+    return setkey_spd("delete", addr_p);
 }
 
 /**
@@ -399,7 +422,7 @@ racoon_update()
 
     FILE *racoon_conf = fopen(racoon_conf_path, "a");
     if (racoon_conf == NULL) return -1;
-    
+
     // actual configuration writing would happen here
     for (int i = 0; i < racoon_peerlist_len; i++) {
         struct racoon_peer *peer = &racoon_peerlist[i];
@@ -426,14 +449,18 @@ racoon_update()
         // write sainfo here
         fprintf(racoon_conf,
             "sainfo (address %s[%d] any address %s[%d] any) {\n"
-            "    lifetime time 1 hour;\n" // reauthenticate each hour
+#ifdef DEBUG
+            "    lifetime time 1 minute;\n" // reauthenticate each minute
+#else
+            "    lifetime time 1 hour;\n" // reauthenticate every hour
+#endif
             "    authentication_algorithm hmac_sha1;\n"
             "    encryption_algorithm aes;\n"
             "    compression_algorithm deflate;\n" // yes please!
             "}\n\n", base_addr_p, RACOON_PORT, peer->address_p, RACOON_PORT
         );
     }
-    
+
     fclose(racoon_conf);
 #ifdef DEBUG
     printf("debug Reloading configuration into racoon.\n");
