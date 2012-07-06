@@ -4,7 +4,8 @@
  * non-root users, configuring _only_ the IPv6 subnet assigned to SocialVPN.
  * Since this tool can potentially be accessed by non-root users the code is
  * kept to an absolute minimum: security, reability, and simplicity are treated
- * as far more important than performance.
+ * as far more important than performance. Almost all operations require O(n)
+ * time, simply due to lack of optimization effort.
  *
  * Note that this tool will allow any malicious or crafty user on your system to
  * configure SocialVPN addresses in a (limited) way.
@@ -57,6 +58,7 @@ int racoon_peerlist_len = 0;
 // function prototypes go here:
 int main(int argc, const char **argv);
 void command_add_peer(const char *addr_p, const char *pubkeyfile_path);
+void command_remove_peer(const char *addr_p);
 int verify_ipv6_addr(const char *input);
 int verify_path(const char *input);
 int setkey_associate(const char *addr_p);
@@ -153,6 +155,8 @@ main(int argc, const char **argv)
         buffer[i] = '\0'; // replace the ending newline
         if (strcmp(command, "add_peer") == 0 && command_argc == 2)
             command_add_peer(command_argv[0], command_argv[1]);
+        else if (strcmp(command, "remove_peer") == 0 && command_argc == 1)
+            command_remove_peer(command_argv[0]);
         else
             printf("fail Bad command or argument count for '%s' (%d args)\n",
                    command, command_argc);
@@ -161,7 +165,7 @@ main(int argc, const char **argv)
 #ifdef DEBUG
     printf("debug Got EOF or error. Exiting.\n");
 #endif
-    
+
     main_exit();
     return 0;
 }
@@ -232,7 +236,7 @@ command_add_peer(const char *addr_p, const char *pubkeyfile_path)
     peer.pubkeyfile_path = malloc(PATH_MAX + 1);
     if (realpath(pubkeyfile_path, peer.pubkeyfile_path) == NULL) {
         free(peer.pubkeyfile_path);
-        printf("fail Could not expand relative public key path.");
+        printf("fail Could not expand relative public key path.\n");
         return;
     }
 
@@ -250,6 +254,49 @@ command_add_peer(const char *addr_p, const char *pubkeyfile_path)
     // set us up with setkey
     if (setkey_associate(addr_p) != 0) {
         printf("fail Call to setkey failed.\n");
+        return;
+    }
+    printf("pass\n");
+}
+
+/**
+ * Removes a peer from the internal peerlist and from the racoon configuration.
+ */
+void
+command_remove_peer(const char *addr_p)
+{
+    if (!verify_ipv6_addr(addr_p)) {
+        printf("fail Bad IPv6 address.\n");
+        return;
+    }
+    struct in6_addr addr; inet_pton(AF_INET6, addr_p, &addr);
+    int peer_index = 0;
+    while (1) {
+        if (peer_index >= racoon_peerlist_len) {
+            printf("fail Could not remove peer, as it could not be found.\n");
+            return;
+        }
+        if (!memcmp(&racoon_peerlist[peer_index].address, &addr, sizeof(addr)))
+            break;
+        peer_index++;
+    }
+    free(racoon_peerlist[peer_index].pubkeyfile_path);
+    // we found the matching peer, now we need to shift everything in the array
+    // after it back one slot
+    for (int i = peer_index + 1; i < racoon_peerlist_len; i++) {
+        racoon_peerlist[i-1] = racoon_peerlist[i];
+    }
+    racoon_peerlist_len--;
+    // remove the setkey association
+    if (setkey_disassociate(addr_p) != 0) {
+        printf("fail Call to setkey failed.\n");
+        // try to clean up the racoon file anyways
+        racoon_update();
+        return;
+    }
+    // rewrite the racoon conf file
+    if (racoon_update() != 0) {
+        printf("fail Update of racoon configuration file failed.\n");
         return;
     }
     printf("pass\n");
