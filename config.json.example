@@ -3,17 +3,22 @@
     "ipv6_addr": "fd50:0dbc:41f2:4a3c:b683:19a7:63b4:f736",
     "tap_name": "svpn0",
     "port": 5800,
+    "ipv6_ipsec_enabled": true,
+    "ipv6_ipsec_privkeyfile_path": "ipsec_key.priv",
     "peers": [
         {
             "id": "bob",
             "ipv4_addr": "10.0.0.2",
             "ipv6_addr": "fd50:0dbc:41f2:4a3c:f7f3:3c73:37ef:74a7",
+            "ipv6_encryption": "ipsec",
+            "ipv6_ipsec_pubkeyfile_path": "bob_ipsec_key.pub",
             "port": 5800
         },
         {
             "id": "chris",
             "ipv4_addr": "10.0.0.3",
             "ipv6_addr": "fd50:0dbc:41f2:4a3c:9bf2:40cd:6a36:a9a7",
+            "ipv6_encryption": null,
             "port": 5800
         }
     ]

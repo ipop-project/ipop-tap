@@ -21,12 +21,15 @@
 #include <headers.h>
 #include <socket_utils.h>
 #include <packetio.h>
+#ifdef USE_IPV6_IPSEC
+#include <animal_control.h>
+#endif
 #include <svpn.h>
 
 static int process_inputs(thread_opts_t *opts, char *inputs[]);
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
                                  char *address);
-static int add_peer_json(json_t *peer_json);
+static int add_peer_json(json_t *peer_json, int ipv6_ipsec_enabled);
 static void main_help(const char *executable);
 static void main_bad_arg(const char *executable, const char *arg);
 int main(int argc, const char **argv);
@@ -81,20 +84,53 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
 }
 
 static int
-add_peer_json(json_t* peer_json) {
+add_peer_json(json_t* peer_json, int ipv6_ipsec_enabled)
+{
     json_t *id_json = json_object_get(peer_json, "id");
     json_t *ipv4_json = json_object_get(peer_json, "ipv4_addr");
     json_t *ipv6_json = json_object_get(peer_json, "ipv6_addr");
+    json_t *ipv6_encryption_json =
+        json_object_get(peer_json, "ipv6_encryption");
     json_t *port_json = json_object_get(peer_json, "port");
 
-    if (id_json == NULL || ipv4_json == NULL || ipv6_json == NULL ||
-                                                            port_json == NULL) {
+    if (id_json == NULL || ipv4_json == NULL || port_json == NULL) {
         return -1;
     }
 
     const char *id = json_string_value(id_json);
     const char *dest_ipv4 = json_string_value(ipv4_json);
-    const char *dest_ipv6 = json_string_value(ipv6_json);
+    
+    // get the ipv6 address, or generate one randomly if there isn't one
+    const char *dest_ipv6;
+    char dest_ipv6_m[40];
+    if (ipv6_json != NULL) dest_ipv6 = json_string_value(ipv6_json);
+    else { // if none is supplied, generate one randomly
+        generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, dest_ipv6_m);
+        dest_ipv6 = dest_ipv6_m; // lets us make dest_ipv6 a const
+    }
+    
+    const char *ipv6_encryption = json_string_value(ipv6_encryption_json);
+    if (ipv6_encryption == NULL || strcmp(ipv6_encryption, "none") == 0) {
+        // do nothing (disable encryption)
+    }
+#ifdef USE_IPV6_IPSEC
+    else if (ipv6_ipsec_enabled && strcmp(ipv6_encryption, "ipsec") == 0) {
+        const char *pubkeyfile_path = json_string_value(
+            json_object_get(peer_json, "ipv6_ipsec_pubkeyfile_path")
+        );
+        if (pubkeyfile_path == NULL ||
+                     animal_control_add_peer(dest_ipv6, pubkeyfile_path) != 0) {
+            // IPSec requested without pubkeyfile_path provided, or
+            // animal_control failed to add peer for some other reason
+            return -1;
+        }
+    }
+#endif
+    else {
+        // Unsupported type of IPv6 encryption
+        return -1;
+    }
+    
     uint16_t port = json_integer_value(port_json);
 
     if (id == NULL || dest_ipv4 == NULL || dest_ipv6 == NULL || port == 0) {
@@ -113,8 +149,9 @@ add_peer_json(json_t* peer_json) {
 static void
 main_help(const char *executable)
 {
-    printf("Usage: %s [-h, --help] [-c|--config path] [-i|--id name]\n"
-           "       [-6 ipv6_address] [-p|--port udp_port]\n"
+    printf("Usage: %s [-h|--help] [-c|--config path] [-i|--id name]\n"
+           "       [-6 ipv6_address] [-e|--6-ipsec] [-d|--6-nosec]\n"
+           "       [-k|--privkey private_keyfile.priv] [-p|--port udp_port]\n"
            "       [-t|--tap device_name] [-v|--verbose]\n\n", executable);
 
     printf("Arguments:\n");
@@ -132,6 +169,14 @@ main_help(const char *executable)
     printf("    -6:            The virtual IPv6 address to use on the tap\n"
            "                   device. Must begin with 'fd50:0dbc:41f2:4a3c'.\n"
            "                   (default: randomly generated)\n");
+#ifdef USE_IPV6_IPSEC
+    printf("    -e, --6-ipsec: Force enable IPSec support for IPv6.\n"
+           "                   (default: enabled)\n");
+    printf("    -d, --6-nosec: Force disable IPSec support for IPv6.\n"
+           "                   (default: enabled)\n");
+    printf("    -k, --privkey: Path to IPv6 IPSec private key.\n"
+           "                   (default: ipsec_key.priv)\n");
+#endif
     printf("    -p, --port:    The UDP port used by svpn to send and receive\n"
            "                   packet data. (default: 5800)\n");
     printf("    -t, --tap:     The name of the system tap device to use. If\n"
@@ -150,6 +195,11 @@ main_bad_arg(const char *executable, const char* arg)
     main_help(executable);
 }
 
+static void
+main_animal_control_exit(void) {
+    animal_control_exit();
+}
+
 #define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
 
 int
@@ -159,13 +209,18 @@ main(int argc, const char *argv[])
 
     // mark the various configurable options as unset or as their defaults
     // (dependent on how the option must be manipulated)
-    char config_file[PATH_MAX]; strcpy(config_file, "config.json");
+    char config_file[PATH_MAX+1]; strcpy(config_file, "config.json");
     char client_id[ID_SIZE]; client_id[0] = '\0';
     char ipv4_addr[4*4]; ipv4_addr[0] = '\0';
     char ipv6_addr[8*5]; ipv6_addr[0] = '\0';
     uint16_t port = 0;
     char tap_device_name[IFNAMSIZ]; tap_device_name[0] = '\0';
     int verbose = 0;
+#ifdef USE_IPV6_IPSEC
+    int ipv6_ipsec = -1;
+    char ipv6_ipsec_privkeyfile_path[PATH_MAX+1];
+    ipv6_ipsec_privkeyfile_path[0] = '\0';
+#endif
 
     // Ideally we'd define defaults first, then configuration file stuff, then
     // command-line arguments, but unfortunately the configuration file can be
@@ -190,6 +245,17 @@ main(int argc, const char *argv[])
             if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)) {
                 strcpy(ipv6_addr, argv[i]);
             } else BAD_ARG
+#ifdef USE_IPV6_IPSEC
+        } else if (strcmp(a, "-e") == 0 || strcmp(a, "--6-ipsec") == 0) {
+            ipv6_ipsec = 1;
+        } else if (strcmp(a, "-d") == 0 || strcmp(a, "--6-nosec") == 0) {
+            ipv6_ipsec = 0;
+        } else if (strcmp(a, "-k") == 0 || strcmp(a, "--privkey") == 0) {
+            if (++i < argc && strlen(argv[i])
+                                        < sizeof(ipv6_ipsec_privkeyfile_path)) {
+                strcpy(ipv6_ipsec_privkeyfile_path, argv[i]);
+            } else BAD_ARG
+#endif
         } else if (strcmp(a, "-p") == 0 || strcmp(a, "--port") == 0) {
             if (++i < argc) {
                 port = (uint16_t) atoi(argv[i]);
@@ -250,6 +316,25 @@ main(int argc, const char *argv[])
                     }
                 }
             }
+#ifdef USE_IPV6_IPSEC
+            if (ipv6_ipsec == -1) {
+                json_t *ipsec_json = json_object_get(config_json,
+                                                     "ipv6_ipsec_enabled");
+                if (json_is_true(ipsec_json)) ipv6_ipsec = 1;
+                else if (json_is_false(ipsec_json)) ipv6_ipsec = 0;
+            }
+            if (ipv6_ipsec_privkeyfile_path[0] == '\0') {
+                json_t *key_path_json =
+                    json_object_get(config_json, "ipv6_ipsec_privkeyfile_path");
+                if (key_path_json != NULL) {
+                    const char *str = json_string_value(key_path_json);
+                    if (str != NULL) {
+                        strncpy(ipv6_ipsec_privkeyfile_path, str, PATH_MAX);
+                        ipv6_ipsec_privkeyfile_path[PATH_MAX] = '\0';
+                    }
+                }
+            }
+#endif
             if (port == 0) {
                 json_t *port_json = json_object_get(config_json, "port");
                 if (port_json != NULL) {
@@ -287,6 +372,20 @@ main(int argc, const char *argv[])
     if (ipv4_addr[0] == '\0') strcpy(ipv4_addr, "172.31.0.100");
     if (port == 0) port = 5800;
     if (tap_device_name[0] == '\0') strcpy(tap_device_name, "svpn0");
+#ifdef USE_IPV6_IPSEC
+    if (ipv6_ipsec == -1) ipv6_ipsec = 1;
+    if (ipv6_ipsec_privkeyfile_path[0] == '\0')
+        strcpy(ipv6_ipsec_privkeyfile_path, "ipsec_key.priv");
+#endif
+    
+    // run any code that needs to be run before adding peers (but after reading
+    // configuration file)
+#ifdef USE_IPV6_IPSEC
+    if (ipv6_ipsec) {
+        animal_control_init(ipv6_addr, 64, ipv6_ipsec_privkeyfile_path);
+        atexit(&main_animal_control_exit);
+    }
+#endif
 
     if (verbose) {
         // pretty-print the client configuration
@@ -295,6 +394,10 @@ main(int argc, const char *argv[])
         printf("    Virtual IPv6 Address: '%s'\n", ipv6_addr);
         printf("    UDP Socket Port: %d\n", port);
         printf("    TAP Virtual Device Name: '%s'\n", tap_device_name);
+#ifdef USE_IPV6_IPSEC
+        printf("    IPv6 IPSec Encryption: %s\n",
+                                           ipv6_ipsec ? "enabled" : "disabled");
+#endif
     }
 
     // Initialize the peerlist for possible peers we might add
@@ -308,7 +411,11 @@ main(int argc, const char *argv[])
         if (json_is_array(peerlist_json)) {
             for (int i = 0; i < json_array_size(peerlist_json); i++) {
                 json_t *peer_json = json_array_get(peerlist_json, i);
-                add_peer_json(peer_json);
+#ifdef USE_IPV6_IPSEC
+                add_peer_json(peer_json, ipv6_ipsec);
+#else
+                add_peer_json(peer_json, 0);
+#endif
             }
         }
     }

@@ -2,6 +2,8 @@
 #ifndef _SVPN_H_
 #define _SVPN_H_
 
+#define _GNU_SOURCE
+
 #define MTU 1300
 #define BUFLEN 2048
 #define BUF_OFFSET 40 // Gives room to store the headers

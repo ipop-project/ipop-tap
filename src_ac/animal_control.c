@@ -157,9 +157,12 @@ main(int argc, const char **argv)
             command_add_peer(command_argv[0], command_argv[1]);
         else if (strcmp(command, "remove_peer") == 0 && command_argc == 1)
             command_remove_peer(command_argv[0]);
+        else if (strcmp(command, "alive") == 0 && command_argc == 0)
+            printf("pass\n"); // kinda like a ping, just to check if we're alive
         else
             printf("fail Bad command or argument count for '%s' (%d args)\n",
                    command, command_argc);
+        fflush(stdout);
     }
 
 #ifdef DEBUG
@@ -495,7 +498,7 @@ racoon_update()
         );
         // write sainfo here
         fprintf(racoon_conf,
-            "sainfo (address %s[%d] any address %s[%d] any) {\n"
+            "sainfo address %s [%d] any  address %s [%d] any {\n"
 #ifdef DEBUG
             "    lifetime time 1 minute;\n" // reauthenticate each minute
 #else

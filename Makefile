@@ -1,7 +1,7 @@
 # build with: make
 # run with:   sudo make exec
 CC=gcc
-CFLAGS=-Wall --std=gnu99
+CFLAGS=-Wall --std=gnu99 -D USE_IPV6_IPSEC
 CFLAGS_DEPLOY=-O3
 CFLAGS_DEBUG=-g -O0 -D DEBUG # Include debug symbols, disable optimizations, etc
 SRC_DIR=src
