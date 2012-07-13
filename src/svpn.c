@@ -195,10 +195,13 @@ main_bad_arg(const char *executable, const char* arg)
     main_help(executable);
 }
 
+#ifdef USE_IPV6_IPSEC
 static void
-main_animal_control_exit(void) {
+main_animal_control_exit(void)
+{
     animal_control_exit();
 }
+#endif
 
 #define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
 
