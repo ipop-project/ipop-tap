@@ -11,8 +11,9 @@ LIBS=-lpthread -lcrypto -lssl # flags for dynamically linked libraries
 
 # create the call to CC needed for a base build
 CC_BUILD=$(CC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \
-         $(STATIC_LIB_DIR)/*/*.c -I$(wildcard $(STATIC_LIB_DIR)/*) $(LIBS) \
-		 -o "$(BIN_DIR)/svpn"
+         $(STATIC_LIB_DIR)/*/*.c \
+		 $(foreach dir,$(wildcard $(STATIC_LIB_DIR)/*),-I$(dir)) $(LIBS) \
+         -o "$(BIN_DIR)/svpn"
 
 all: build
 
