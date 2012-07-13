@@ -7,7 +7,7 @@ use with IPSec for IPv6 in SocialVPN. The public key it generates can be given \
 to your friends, and the private key can be kept to your self. Together, these \
 can be used to verify your identity and to initialize an encrypted connection."
 USAGE="Usage: $EMPH$0$END_EMPH [privatekey] [publickey] [keylength]
-Eg:    $EMPH$0$END_EMPH privkey.pem publickey.pem 2048"
+Eg:    $EMPH$0$END_EMPH privkey.priv publickey.pub 2048"
 
 if ( [ $# -eq 1 ] && ( [ $1 = "-h" ] || [ $1 = "--help" ] )); then
     echo "$EMPH`basename \"$0\" .sh`:$END_EMPH $ABOUT\n" | fold --spaces

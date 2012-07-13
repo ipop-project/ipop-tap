@@ -99,7 +99,7 @@ add_peer_json(json_t* peer_json, int ipv6_ipsec_enabled)
 
     const char *id = json_string_value(id_json);
     const char *dest_ipv4 = json_string_value(ipv4_json);
-    
+
     // get the ipv6 address, or generate one randomly if there isn't one
     const char *dest_ipv6;
     char dest_ipv6_m[40];
@@ -108,7 +108,7 @@ add_peer_json(json_t* peer_json, int ipv6_ipsec_enabled)
         generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, dest_ipv6_m);
         dest_ipv6 = dest_ipv6_m; // lets us make dest_ipv6 a const
     }
-    
+
     const char *ipv6_encryption = json_string_value(ipv6_encryption_json);
     if (ipv6_encryption == NULL || strcmp(ipv6_encryption, "none") == 0) {
         // do nothing (disable encryption)
@@ -130,12 +130,11 @@ add_peer_json(json_t* peer_json, int ipv6_ipsec_enabled)
         // Unsupported type of IPv6 encryption
         return -1;
     }
-    
+
     uint16_t port = json_integer_value(port_json);
 
-    if (id == NULL || dest_ipv4 == NULL || dest_ipv6 == NULL || port == 0) {
+    if (id == NULL || dest_ipv4 == NULL || dest_ipv6 == NULL || port == 0)
         return -1;
-    }
 
 #ifdef DEBUG
     printf("Added peer with id: %s\n", id);
@@ -195,16 +194,13 @@ main_bad_arg(const char *executable, const char* arg)
     main_help(executable);
 }
 
-#ifdef USE_IPV6_IPSEC
-static void
-main_animal_control_exit(void)
-{
-    animal_control_exit();
-}
-#endif
-
 #define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
 
+/**
+ * Performs (in order) argument processing, configuration file processing, sets
+ * default arguments for any settings left unset, spawns the threads for sending
+ * and receiving, and then reads control commands from stdin until exit.
+ */
 int
 main(int argc, const char *argv[])
 {
@@ -288,35 +284,27 @@ main(int argc, const char *argv[])
             return -1;
         } else {
             if (client_id[0] == '\0') {
-                json_t *id_json = json_object_get(config_json, "id");
-                if (id_json != NULL) {
-                    const char *str = json_string_value(id_json);
-                    if (str != NULL) {
-                        strncpy(client_id, str, sizeof(client_id)-1);
-                        client_id[sizeof(client_id)-1] = '\0';
-                    }
+                const char *str =
+                    json_string_value(json_object_get(config_json, "id"));
+                if (str != NULL) {
+                    strncpy(client_id, str, sizeof(client_id)-1);
+                    client_id[sizeof(client_id)-1] = '\0';
                 }
             }
             if (ipv4_addr[0] == '\0') {
-                json_t *ipv4_addr_json =
-                    json_object_get(config_json, "ipv4_addr");
-                if (ipv4_addr_json != NULL) {
-                    const char *str = json_string_value(ipv4_addr_json);
-                    if (str != NULL) {
-                        strncpy(ipv4_addr, str, sizeof(ipv4_addr)-1);
-                        ipv4_addr[sizeof(ipv4_addr)-1] = '\0';
-                    }
+                const char *str = json_string_value(
+                    json_object_get(config_json, "ipv4_addr"));
+                if (str != NULL) {
+                    strncpy(ipv4_addr, str, sizeof(ipv4_addr)-1);
+                    ipv4_addr[sizeof(ipv4_addr)-1] = '\0';
                 }
             }
             if (ipv6_addr[0] == '\0') {
-                json_t *ipv6_addr_json =
-                    json_object_get(config_json, "ipv6_addr");
-                if (ipv6_addr_json != NULL) {
-                    const char *str = json_string_value(ipv6_addr_json);
-                    if (str != NULL) {
-                        strncpy(ipv6_addr, str, sizeof(ipv6_addr)-1);
-                        ipv6_addr[sizeof(ipv6_addr)-1] = '\0';
-                    }
+                const char *str = json_string_value(
+                    json_object_get(config_json, "ipv6_addr"));
+                if (str != NULL) {
+                    strncpy(ipv6_addr, str, sizeof(ipv6_addr)-1);
+                    ipv6_addr[sizeof(ipv6_addr)-1] = '\0';
                 }
             }
 #ifdef USE_IPV6_IPSEC
@@ -325,16 +313,17 @@ main(int argc, const char *argv[])
                                                      "ipv6_ipsec_enabled");
                 if (json_is_true(ipsec_json)) ipv6_ipsec = 1;
                 else if (json_is_false(ipsec_json)) ipv6_ipsec = 0;
+                // if the json value is NULL or not a boolean, ipv6_ipsec
+                // doesn't get set
             }
             if (ipv6_ipsec_privkeyfile_path[0] == '\0') {
-                json_t *key_path_json =
-                    json_object_get(config_json, "ipv6_ipsec_privkeyfile_path");
-                if (key_path_json != NULL) {
-                    const char *str = json_string_value(key_path_json);
-                    if (str != NULL) {
-                        strncpy(ipv6_ipsec_privkeyfile_path, str, PATH_MAX);
-                        ipv6_ipsec_privkeyfile_path[PATH_MAX] = '\0';
-                    }
+                const char *str =
+                    json_string_value(
+                        json_object_get(
+                            config_json, "ipv6_ipsec_privkeyfile_path"));
+                if (str != NULL) {
+                    strncpy(ipv6_ipsec_privkeyfile_path, str, PATH_MAX);
+                    ipv6_ipsec_privkeyfile_path[PATH_MAX] = '\0';
                 }
             }
 #endif
@@ -346,14 +335,11 @@ main(int argc, const char *argv[])
                 }
             }
             if (tap_device_name[0] == '\0') {
-                json_t *tap_device_name_json =
-                    json_object_get(config_json, "tap_name");
-                if (tap_device_name_json != NULL) {
-                    const char *str = json_string_value(tap_device_name_json);
-                    if (str != NULL) {
-                        strncpy(tap_device_name, str, sizeof(tap_device_name));
-                        tap_device_name[sizeof(tap_device_name)-1] = '\0';
-                    }
+                const char *str =
+                    json_string_value(json_object_get(config_json, "tap_name"));
+                if (str != NULL) {
+                    strncpy(tap_device_name, str, sizeof(tap_device_name));
+                    tap_device_name[sizeof(tap_device_name)-1] = '\0';
                 }
             }
         }
@@ -380,13 +366,13 @@ main(int argc, const char *argv[])
     if (ipv6_ipsec_privkeyfile_path[0] == '\0')
         strcpy(ipv6_ipsec_privkeyfile_path, "ipsec_key.priv");
 #endif
-    
+
     // run any code that needs to be run before adding peers (but after reading
     // configuration file)
 #ifdef USE_IPV6_IPSEC
     if (ipv6_ipsec) {
         animal_control_init(ipv6_addr, 64, ipv6_ipsec_privkeyfile_path);
-        atexit(&main_animal_control_exit);
+        atexit((void (*)(void))(&animal_control_exit));
     }
 #endif
 
@@ -451,15 +437,13 @@ main(int argc, const char *argv[])
     if (getuid() == 0) {
         if (setgid(pwd->pw_uid) < 0) {
             fprintf(stderr, "setgid failed\n");
-            close(opts.sock4);
-            close(opts.sock6);
+            close(opts.sock4); close(opts.sock6);
             tap_close();
             return -1;
         }
         if (setuid(pwd->pw_gid) < 0) {
             fprintf(stderr, "setuid failed\n");
-            close(opts.sock4);
-            close(opts.sock6);
+            close(opts.sock4); close(opts.sock6);
             tap_close();
             return -1;
         }

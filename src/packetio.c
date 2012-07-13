@@ -119,6 +119,10 @@ udp_send_thread(void *data)
     pthread_exit(NULL);
 }
 
+/**
+ * Reads packet data from the socket that we received from a remote peer, and
+ * writes it to the local tap device, making the traffic show up locally.
+ */
 void *
 udp_recv_thread(void *data)
 {
