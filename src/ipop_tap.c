@@ -49,6 +49,7 @@
 #include "socket_utils.h"
 #include "packetio.h"
 #include "ipop_tap.h"
+#include "utils.h"
 
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
                                  char *address);
@@ -269,8 +270,7 @@ main(int argc, const char *argv[])
                 const char *str =
                     json_string_value(json_object_get(config_json, "id"));
                 if (str != NULL) {
-                    strncpy(client_id, str, sizeof(client_id)-1);
-                    client_id[sizeof(client_id)-1] = '\0';
+                    strlcpy(client_id, str, (sizeof client_id)-1);
                 }
             }
             
@@ -278,8 +278,7 @@ main(int argc, const char *argv[])
                 const char *str = json_string_value(
                     json_object_get(config_json, "ipv4_addr"));
                 if (str != NULL) {
-                    strncpy(ipv4_addr, str, sizeof(ipv4_addr)-1);
-                    ipv4_addr[sizeof(ipv4_addr)-1] = '\0';
+                    strlcpy(ipv4_addr, str, (sizeof ipv4_addr)-1);
                 }
             }
             
@@ -287,8 +286,7 @@ main(int argc, const char *argv[])
                 const char *str = json_string_value(
                     json_object_get(config_json, "ipv6_addr"));
                 if (str != NULL) {
-                    strncpy(ipv6_addr, str, sizeof(ipv6_addr)-1);
-                    ipv6_addr[sizeof(ipv6_addr)-1] = '\0';
+                    strlcpy(ipv6_addr, str, (sizeof ipv6_addr)-1);
                 }
             }
 
@@ -304,8 +302,7 @@ main(int argc, const char *argv[])
                 const char *str =
                     json_string_value(json_object_get(config_json, "tap_name"));
                 if (str != NULL) {
-                    strncpy(tap_device_name, str, sizeof(tap_device_name));
-                    tap_device_name[sizeof(tap_device_name)-1] = '\0';
+                    strlcpy(tap_device_name, str, (sizeof tap_device_name)-1);
                 }
             }
         }
