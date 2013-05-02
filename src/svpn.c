@@ -104,15 +104,6 @@ add_peer_json(json_t* peer_json) {
         dest_ipv6 = dest_ipv6_m; // lets us make dest_ipv6 a const
     }
 
-    const char *ipv6_encryption = json_string_value(ipv6_encryption_json);
-    if (ipv6_encryption == NULL || strcmp(ipv6_encryption, "none") == 0) {
-        // do nothing (disable encryption)
-    }
-    else {
-        // Unsupported type of IPv6 encryption
-        return -1;
-    }
-
     uint16_t port = json_integer_value(port_json);
 
     if (id == NULL || dest_ipv4 == NULL || dest_ipv6 == NULL || port == 0)
