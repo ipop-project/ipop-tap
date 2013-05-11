@@ -14,7 +14,7 @@
  * (>=0) is returned on success, -1 otherwise.
  */
 int
-socket_utils_create_ipv4_udp_socket(uint16_t port)
+socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
 {
     int sock, optval = 1;
     struct sockaddr_in addr;
@@ -30,7 +30,12 @@ socket_utils_create_ipv4_udp_socket(uint16_t port)
     memset(&addr, 0, addr_len);
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
+    //addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (!inet_pton(AF_INET, ip, &addr.sin_addr.s_addr)) {
+        fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
+        return -1;
+    }
 
     if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
         fprintf(stderr, "bind failed\n");
@@ -49,7 +54,7 @@ socket_utils_create_ipv4_udp_socket(uint16_t port)
  *     u_int32_t scope_id = if_nametoindex("svpn0");
  */
 int
-socket_utils_create_ipv6_udp_socket(uint16_t port, u_int32_t scope_id)
+socket_utils_create_ipv6_udp_socket(const uint16_t port, u_int32_t scope_id)
 {
     int sock, optval = 1;
     struct sockaddr_in6 addr = {

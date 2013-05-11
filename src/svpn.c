@@ -46,7 +46,7 @@ process_inputs(thread_opts_t *opts, char **inputs)
         strncpy(id, inputs[1], ID_SIZE);
         struct peer_state *peer;
         peerlist_get_by_id(id, &peer);
-        printf("id = %s ip = %s addr = %s\n", id,
+        printf("id = %s ip = %s port = %s\n", id,
                inet_ntoa(*(struct in_addr*)(&peer->local_ipv4_addr)),
                inputs[4]);
     } else {
@@ -325,7 +325,7 @@ main(int argc, const char *argv[])
     opts.tap = tap_open(tap_device_name, opts.mac);
     opts.local_ip4 = ipv4_addr;
     opts.local_ip6 = ipv6_addr;
-    opts.sock4 = socket_utils_create_ipv4_udp_socket(port);
+    opts.sock4 = socket_utils_create_ipv4_udp_socket("0.0.0.0", port);
     opts.sock6 = socket_utils_create_ipv6_udp_socket(
         port, if_nametoindex(tap_device_name)
     );
@@ -338,7 +338,6 @@ main(int argc, const char *argv[])
     tap_set_up();
 
     // drop root privileges and set to nobody
-    // I need to add chroot jail in here later
     struct passwd * pwd = getpwnam("nobody");
     if (getuid() == 0) {
         if (setgid(pwd->pw_uid) < 0) {
@@ -359,14 +358,30 @@ main(int argc, const char *argv[])
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
 
-    char buf[200] = { '0' };
-    char * inputs[5];
-    int i, j;
+    int input_socket;
+    uint16_t iport = 5799;
+    if ((input_socket = 
+             socket_utils_create_ipv4_udp_socket("127.0.0.1", iport)) < 0) {
+      fprintf(stderr, "socket on port %d failed\n", iport);
+      return -1;
+    }
 
-    while (fgets(buf, sizeof(buf), stdin) != NULL) {
-        // trim newline
-        buf[strlen(buf)-1] = ' ';
+    struct sockaddr_in s_addr;
+    socklen_t len = sizeof(s_addr);
+    char buf[MAXBUF] = {'0'};;
+    char* inputs[5];
+    int i, j, n;
 
+    while (1) {
+        n = recvfrom(input_socket, buf, sizeof(buf), 0, 
+                     (struct sockaddr*) &s_addr, &len);
+        if (n < 0) {
+            fprintf(stderr, "read failed\n");
+            return -1;
+        }
+
+        // overwrites last character
+        buf[n-1] = ' ';
         i = j = 0;
         inputs[j++] = buf + i;
 
