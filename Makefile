@@ -7,7 +7,7 @@ CFLAGS_DEBUG=-g -O0 -D DEBUG # Include debug symbols, disable optimizations, etc
 SRC_DIR=src
 STATIC_LIB_DIR=lib# root directory of statically linked libraries
 BIN_DIR=bin
-LIBS=-lpthread -lcrypto -lssl # flags for dynamically linked libraries
+LIBS=-lpthread # flags for dynamically linked libraries
 
 # create the call to CC needed for a base build
 CC_BUILD=$(CC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \

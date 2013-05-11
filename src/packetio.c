@@ -42,7 +42,7 @@ udp_send_thread(void *data)
 
         if ((buf[14] >> 4) == 0x04) { // ipv4 packet
 #ifdef DEBUG
-            printf("T >> (ipv4) %d %x %x\n", rcount, buf[32], buf[33]);
+            printf("T >> (ipv4) %d\n", rcount);
 #endif
             struct in_addr local_ipv4_addr = {
                 .s_addr = *(unsigned long *)(buf + 30)
@@ -104,9 +104,6 @@ udp_send_thread(void *data)
                        sizeof(struct sockaddr_in)) < 0) {
                 fprintf(stderr, "sendto failed\n");
             }
-#ifdef DEBUG
-            printf("S >> %d %x\n", rcount, peer[i].dest_ipv4_addr.s_addr);
-#endif
         }
     }
 
@@ -145,9 +142,6 @@ udp_recv_thread(void *data)
             fprintf(stderr, "upd recv failed\n");
             break;
         }
-#ifdef DEBUG
-        printf("S << %d %x\n", rcount, addr.sin_addr.s_addr);
-#endif
         get_headers(dec_buf, source_id, dest_id);
 
         if (peerlist_get_by_id(source_id, &peer) < 0) {
@@ -159,6 +153,9 @@ udp_recv_thread(void *data)
         rcount -= BUF_OFFSET;
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
         if ((buf[14] >> 4) == 0x04) { // IPv4 Packet
+#ifdef DEBUG
+            printf("R << (ipv4) %d\n", rcount);
+#endif
             // no encryption handling yet
             translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                              (char *)(&peerlist_local.local_ipv4_addr.s_addr),
@@ -167,7 +164,9 @@ udp_recv_thread(void *data)
                               (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                               rcount);
         } else if ((buf[14] >> 4) == 0x06) { // IPv6 Packet
-            // does nothing
+#ifdef DEBUG
+            printf("R << (ipv6) %d\n", rcount);
+#endif
         } else {
             fprintf(stderr, "Warning: unknown IP packet type: 0x%x\n", buf[14]);
             continue;
@@ -178,9 +177,6 @@ udp_recv_thread(void *data)
             fprintf(stderr, "write to tap error\n");
             break;
         }
-#ifdef DEBUG
-        printf("T << %d %x %x\n", rcount, buf[32], buf[33]);
-#endif
     }
 
     close(sock4);
