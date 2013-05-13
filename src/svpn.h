@@ -20,7 +20,8 @@ typedef struct thread_opts {
     char mac[6];
     char *local_ip4;
     char *local_ip6;
-    struct threadqueue *queue;
+    struct threadqueue *send_queue;
+    struct threadqueue *rcv_queue;
 } thread_opts_t;
 
 #endif

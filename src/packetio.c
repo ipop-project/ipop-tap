@@ -25,7 +25,7 @@ udp_send_thread(void *data)
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
     int tap = opts->tap;
-    struct threadqueue *queue = opts->queue;
+    struct threadqueue *queue = opts->send_queue;
 
     int rcount;
 
@@ -133,7 +133,7 @@ udp_recv_thread(void *data)
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
     int tap = opts->tap;
-    struct threadqueue *queue = opts->queue;
+    struct threadqueue *queue = opts->rcv_queue;
 
     int rcount;
     struct sockaddr_in addr;

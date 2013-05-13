@@ -329,7 +329,8 @@ main(int argc, const char *argv[])
     opts.sock6 = socket_utils_create_ipv6_udp_socket(
         port, if_nametoindex(tap_device_name)
     );
-    opts.queue = NULL;
+    opts.send_queue = NULL;
+    opts.rcv_queue = NULL;
 
     // configure the tap device
     tap_set_ipv4_addr(ipv4_addr, 24);
