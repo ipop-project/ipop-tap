@@ -2,6 +2,8 @@
 #ifndef _SVPN_H_
 #define _SVPN_H_
 
+#include <threadqueue.h>
+
 #define MTU 1300
 #define BUFLEN 2048
 #define BUF_OFFSET 40 // Gives room to store the headers
@@ -18,6 +20,7 @@ typedef struct thread_opts {
     char mac[6];
     char *local_ip4;
     char *local_ip6;
+    struct threadqueue *queue;
 } thread_opts_t;
 
 #endif

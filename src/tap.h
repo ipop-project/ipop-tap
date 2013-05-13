@@ -2,6 +2,10 @@
 #ifndef _TAP_H_
 #define _TAP_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int tap_open(const char *device, char *mac);
 int tap_set_base_flags();
 int tap_set_up();
@@ -17,5 +21,9 @@ int tap_disable_ipv6_autoconfig();
 int tap_set_ipv4_proc_option(const char *option, const char *value);
 int tap_set_ipv6_proc_option(const char *option, const char *value);
 void tap_close();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

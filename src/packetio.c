@@ -25,6 +25,7 @@ udp_send_thread(void *data)
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
     int tap = opts->tap;
+    struct threadqueue *queue = opts->queue;
 
     int rcount;
 
@@ -34,7 +35,6 @@ udp_send_thread(void *data)
     int peercount, is_ipv6;
 
     while (1) {
-
         if ((rcount = read(tap, buf, BUFLEN)) < 0) {
             fprintf(stderr, "tap read failed\n");
             break;
@@ -91,6 +91,14 @@ udp_send_thread(void *data)
                 memcpy(enc_buf + BUF_OFFSET, buf, rcount);
                 rcount += BUF_OFFSET;
             }
+
+            if (queue != NULL) {
+                if (thread_queue_put(queue, enc_buf, rcount) < 0) {
+                    fprintf(stderr, "thread queue error\n");
+                    pthread_exit(NULL);
+                }
+            }
+
             struct sockaddr_in dest_ipv4_addr_sock = {
                 .sin_family = AF_INET,
                 .sin_port = htons(peer[i].port),
@@ -103,6 +111,7 @@ udp_send_thread(void *data)
                        (struct sockaddr *)(&dest_ipv4_addr_sock),
                        sizeof(struct sockaddr_in)) < 0) {
                 fprintf(stderr, "sendto failed\n");
+                pthread_exit(NULL);
             }
         }
     }
@@ -124,6 +133,7 @@ udp_recv_thread(void *data)
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
     int tap = opts->tap;
+    struct threadqueue *queue = opts->queue;
 
     int rcount;
     struct sockaddr_in addr;
@@ -134,10 +144,18 @@ udp_recv_thread(void *data)
     char source_id[ID_SIZE+1] = { 0 };
     char dest_id[ID_SIZE+1] = { 0 };
     struct peer_state *peer = NULL;
+    struct threadmsg msg;
 
     while (1) {
-
-        if ((rcount = recvfrom(sock4, dec_buf, BUFLEN, 0,
+        if (queue != NULL) {
+            if (thread_queue_get(queue, NULL, &msg) != 0) {
+              fprintf(stderr, "threadqueue get failed\n");
+              break;
+            }
+            // msgtype is used to carry message size instead of type
+            memcpy(dec_buf, msg.data, msg.msgtype);
+        }
+        else if ((rcount = recvfrom(sock4, dec_buf, BUFLEN, 0,
                                (struct sockaddr*) &addr, &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
             break;

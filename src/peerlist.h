@@ -8,6 +8,10 @@
 #define ID_SIZE 20
 #define ADDR_SIZE 32
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct peer_state {
     char id[ID_SIZE+1]; // Human readable string identifier
     struct in_addr local_ipv4_addr; // the virtual IPv4 address that we see
@@ -38,5 +42,8 @@ int peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
+#ifdef __cplusplus
+}
+#endif
 
 #endif
