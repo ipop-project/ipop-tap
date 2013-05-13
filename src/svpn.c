@@ -15,13 +15,13 @@
 
 #include <jansson.h>
 
-#include <translator.h>
-#include <peerlist.h>
-#include <tap.h>
-#include <headers.h>
-#include <socket_utils.h>
-#include <packetio.h>
-#include <svpn.h>
+#include "translator.h"
+#include "peerlist.h"
+#include "tap.h"
+#include "headers.h"
+#include "socket_utils.h"
+#include "packetio.h"
+#include "svpn.h"
 
 static int process_inputs(thread_opts_t *opts, char *inputs[]);
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,

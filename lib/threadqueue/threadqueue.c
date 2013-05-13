@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 
-#include <threadqueue.h>
+#include "threadqueue.h"
 
 
 #define MSGPOOL_SIZE 256

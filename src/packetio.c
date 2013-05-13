@@ -7,12 +7,12 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include <peerlist.h>
-#include <headers.h>
-#include <translator.h>
-#include <tap.h>
-#include <svpn.h>
-#include <packetio.h>
+#include "peerlist.h"
+#include "headers.h"
+#include "translator.h"
+#include "tap.h"
+#include "svpn.h"
+#include "packetio.h"
 
 /**
  * Reads packet data from the tap device that was locally written, and sends it

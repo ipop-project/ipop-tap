@@ -1,8 +1,8 @@
 
 #include <string.h>
 
-#include <svpn.h>
-#include <headers.h>
+#include "svpn.h"
+#include "headers.h"
 
 int
 get_headers(const unsigned char *buf, char *source_id, char *dest_id)

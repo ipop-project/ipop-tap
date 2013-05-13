@@ -7,8 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include <peerlist.h>
-// #include <svpn.h>
+#include "peerlist.h"
 
 static size_t table_length;
 static struct hsearch_data *id_table;

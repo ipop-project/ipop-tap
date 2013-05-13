@@ -16,7 +16,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#include <tap.h>
+#include "tap.h"
 
 #ifndef DROID_BUILD
 
