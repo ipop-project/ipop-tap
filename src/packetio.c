@@ -76,7 +76,8 @@ udp_send_thread(void *data)
         }
 
         // translate and send all the packets
-        for(int i = 0; i < peercount; i++) {
+        int i;
+        for(i = 0; i < peercount; i++) {
             set_headers(enc_buf, peerlist_local.id, peer[i].id);
             if (!is_ipv6) { // IPv4 Packet
                 // IPv4 has no security mechanism in place at the moment
