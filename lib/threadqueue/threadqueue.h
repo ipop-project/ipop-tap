@@ -193,17 +193,31 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata);
 
 /**
  * @ingroup ThreadQueue
- * Add blocking function
+ * Add blocking put function
  *
- * threadqueue_put adds blocking put support by using nanosleep
+ * threadqueue_put adds blocking put support by using nanosleep and handles
+ * dynamic memory allocation
  *
  * @param queue Pointer to the queue on where the message should be added.
  * @param data the "message".
  * @param len a size_t specifying the length of the message.
  * @return 0 on succes and EINVAL on failure
  */
-int thread_queue_put(struct threadqueue *queue, void *data, size_t len);
+int thread_queue_bput(struct threadqueue *queue, void *data, size_t len);
 
+/**
+ * @ingroup ThreadQueue
+ * Add blocking get function
+ *
+ * threadqueue_get adds blocking get support by using nanosleep and handles
+ * dynamic memory cleanup
+ *
+ * @param queue Pointer to the queue on where the message should be added.
+ * @param data the "message".
+ * @param len a size_t specifying the length of the message.
+ * @return 0 on succes and EINVAL on failure
+ */
+int thread_queue_bget(struct threadqueue *queue, void *buf, size_t len);
 #ifdef __cplusplus
 }
 #endif

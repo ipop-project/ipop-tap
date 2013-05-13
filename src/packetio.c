@@ -93,7 +93,7 @@ udp_send_thread(void *data)
             }
 
             if (queue != NULL) {
-                if (thread_queue_put(queue, enc_buf, rcount) < 0) {
+                if (thread_queue_bput(queue, enc_buf, rcount) < 0) {
                     fprintf(stderr, "thread queue error\n");
                     pthread_exit(NULL);
                 }
@@ -144,16 +144,13 @@ udp_recv_thread(void *data)
     char source_id[ID_SIZE+1] = { 0 };
     char dest_id[ID_SIZE+1] = { 0 };
     struct peer_state *peer = NULL;
-    struct threadmsg msg;
 
     while (1) {
         if (queue != NULL) {
-            if (thread_queue_get(queue, NULL, &msg) != 0) {
+            if ((rcount = thread_queue_bget(queue, dec_buf, BUFLEN)) < 0) {
               fprintf(stderr, "threadqueue get failed\n");
               break;
             }
-            // msgtype is used to carry message size instead of type
-            memcpy(dec_buf, msg.data, msg.msgtype);
         }
         else if ((rcount = recvfrom(sock4, dec_buf, BUFLEN, 0,
                                (struct sockaddr*) &addr, &addrlen)) < 0) {

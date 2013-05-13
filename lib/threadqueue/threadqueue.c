@@ -208,18 +208,36 @@ long thread_queue_length(struct threadqueue *queue)
 }
 
 // TODO - Implement using nanosleep
-int thread_queue_put(struct threadqueue *queue, void *data, size_t len)
+int thread_queue_bput(struct threadqueue *queue, void *data, size_t len)
 {
     int retval = 0;
     struct timespec req, rem;
     req.tv_sec = 0;
     req.tv_nsec = 1000;
 
+    void *queue_data = malloc(len);
+    memcpy(queue_data, data, len);
+
     while (1) {
-        retval = thread_queue_add(queue, data, len);
+        retval = thread_queue_add(queue, queue_data, len);
         if (retval == ENOMEM) nanosleep(&req, &rem);
         else break;
     }
 
   return retval;
+}
+
+int thread_queue_bget(struct threadqueue *queue, void *buf, size_t len)
+{
+    int retval;
+    struct threadmsg msg;
+    retval = thread_queue_get(queue, NULL, &msg);
+    if (retval == 0) {
+        // msgtype is used to store data length
+        if (msg.msgtype > len) return -1;
+        memcpy(buf, msg.data, len);
+        free(msg.data);
+        retval = len;
+    }
+    return retval;
 }
