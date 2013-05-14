@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <stdio.h>
 
 #include "threadqueue.h"
 
@@ -208,7 +209,7 @@ long thread_queue_length(struct threadqueue *queue)
 }
 
 // TODO - Implement using nanosleep
-int thread_queue_bput(struct threadqueue *queue, void *data, size_t len)
+int thread_queue_bput(struct threadqueue *queue, const void *data, size_t len)
 {
     int retval = 0;
     struct timespec req, rem;
@@ -223,8 +224,7 @@ int thread_queue_bput(struct threadqueue *queue, void *data, size_t len)
         if (retval == ENOMEM) nanosleep(&req, &rem);
         else break;
     }
-
-  return retval;
+    return retval;
 }
 
 int thread_queue_bget(struct threadqueue *queue, void *buf, size_t len)
@@ -235,6 +235,7 @@ int thread_queue_bget(struct threadqueue *queue, void *buf, size_t len)
     if (retval == 0) {
         // msgtype is used to store data length
         if (msg.msgtype > len) return -1;
+        len = msg.msgtype;
         memcpy(buf, msg.data, len);
         free(msg.data);
         retval = len;

@@ -203,7 +203,7 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata);
  * @param len a size_t specifying the length of the message.
  * @return 0 on succes and EINVAL on failure
  */
-int thread_queue_bput(struct threadqueue *queue, void *data, size_t len);
+int thread_queue_bput(struct threadqueue *queue, const void *data, size_t len);
 
 /**
  * @ingroup ThreadQueue

@@ -22,6 +22,7 @@ typedef struct thread_opts {
     char *local_ip6;
     struct threadqueue *send_queue;
     struct threadqueue *rcv_queue;
+    void (*send_signal)(struct threadqueue *);
 } thread_opts_t;
 
 #endif

@@ -98,6 +98,10 @@ udp_send_thread(void *data)
                     fprintf(stderr, "thread queue error\n");
                     pthread_exit(NULL);
                 }
+                if (opts->send_signal != NULL) {
+                  opts->send_signal(queue);
+                }
+                continue;
             }
 
             struct sockaddr_in dest_ipv4_addr_sock = {
