@@ -1,3 +1,2 @@
+- Send proper response if IP address does not exist
 
-- chroot jail
-- Add DTLS support with self-signed certificates
