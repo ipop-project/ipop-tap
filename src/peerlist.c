@@ -99,8 +99,11 @@ peerlist_set_local(const char *_local_id,
     increment_base_ipv4_addr();
     memcpy(&local_ipv6_addr, _local_ipv6_addr, sizeof(struct in6_addr));
     struct in_addr dest_ipv4_addr;
-    unsigned char dest_ipv4_addr_c[] = {127, 0, 0, 1};
-    memcpy(&dest_ipv4_addr.s_addr, dest_ipv4_addr_c, sizeof(unsigned long));
+    char ip[] = "127.0.0.1";
+    if (!inet_pton(AF_INET, ip, &dest_ipv4_addr.s_addr)) {
+        fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
+        return -1;
+    }
 
     // initialize the local peer struct
     strcpy(peerlist_local.id, local_id);
