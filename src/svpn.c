@@ -359,12 +359,14 @@ main(int argc, const char *argv[])
     pthread_t send_thread, recv_thread;
     pthread_create(&send_thread, NULL, udp_send_thread, &opts);
     pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
-
+#ifndef EN_INPUT
+    pthread_join(recv_thread, NULL);
+#else
     int input_socket;
-    uint16_t iport = 5799;
+    uint16_t iport = port - 1;
     if ((input_socket = 
              socket_utils_create_ipv4_udp_socket("127.0.0.1", iport)) < 0) {
-      fprintf(stderr, "socket on port %d failed\n", iport);
+      fprintf(stderr, "socket failed at %d port\n", iport);
       return -1;
     }
 
@@ -398,6 +400,7 @@ main(int argc, const char *argv[])
         }
         process_inputs(&opts, inputs);
     }
+#endif
     return 0;
 }
 
