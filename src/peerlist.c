@@ -3,10 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <search.h> // hash tables!
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+#include "../lib/hsearch/search.h" // hash tables!
 #include "peerlist.h"
 
 static size_t table_length;
