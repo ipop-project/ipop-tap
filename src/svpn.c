@@ -362,6 +362,7 @@ main(int argc, const char *argv[])
 #ifndef EN_INPUT
     pthread_join(recv_thread, NULL);
 #else
+    // sockets do not work after nobody on Android
     int input_socket;
     uint16_t iport = port - 1;
     if ((input_socket = 
