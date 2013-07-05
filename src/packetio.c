@@ -75,7 +75,7 @@ udp_send_thread(void *data)
             continue; // non-multicast, no peers found
         }
 
-        rcount += BUF_OFFSET;
+        int ncount = rcount + BUF_OFFSET;
         // translate and send all the packets
         int i;
         for(i = 0; i < peercount; i++) {
@@ -84,16 +84,16 @@ udp_send_thread(void *data)
                 // IPv4 has no security mechanism in place at the moment
                 // IPv4 needs in-packet address translation
                 translate_packet(buf, NULL, NULL, rcount);
-                memcpy(enc_buf + BUF_OFFSET, buf, rcount - BUF_OFFSET);
+                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
             } else { // IPv6 Packet
                 // IPv6 will typically use IPSec for security
                 // (not handled by us)
                 // Send the data without encrypting it ourselves:
-                memcpy(enc_buf + BUF_OFFSET, buf, rcount - BUF_OFFSET);
+                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
             }
 
             if (queue != NULL) {
-                if (thread_queue_bput(queue, enc_buf, rcount) < 0) {
+                if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
                     fprintf(stderr, "thread queue error\n");
                     pthread_exit(NULL);
                 }
