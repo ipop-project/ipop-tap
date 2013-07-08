@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// TODO - This limited table size causes segfault after too many upnp calls
+// TODO - This limited table size breaks upnp translator when full
 #define TABLE_SIZE 100
 
 struct upnp_state {
@@ -106,7 +106,7 @@ update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
     }
     else if (source != NULL && buf[23] == 0x11 && ustate.c_port == d_port) {
         i = 42;
-        while (i < len) {
+        while (i < len && idx < TABLE_SIZE) {
             if (strncmp("http://172.", buf + i, 11) == 0) {
                 idx = ustate.s_count++;
                 memcpy(tmp, buf + i + 7, 12);
