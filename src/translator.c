@@ -30,7 +30,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TABLE_SIZE 10
+// TODO - This limited table size causes segfault after too many upnp calls
+#define TABLE_SIZE 100
 
 struct upnp_state {
     uint16_t c_port;
@@ -95,7 +96,7 @@ is_upnp_endpoint(const char *source, uint16_t s_port)
 static int
 update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
 {
-    char tmp[20] = {'\0'};
+    char tmp[100] = {'\0'};
     int i, idx;
     uint16_t d_port = (buf[36] << 8 & 0xFF00) + (buf[37] & 0xFF);
     uint16_t s_port = (buf[34] << 8 & 0xFF00) + (buf[35] & 0xFF);

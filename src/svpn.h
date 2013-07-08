@@ -30,7 +30,7 @@
 
 #include "../lib/threadqueue/threadqueue.h"
 
-#define MTU 1300
+#define MTU 1280
 #define BUFLEN 2048
 #define BUF_OFFSET 40 // Gives room to store the headers
 #define ID_SIZE 20

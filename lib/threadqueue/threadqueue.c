@@ -8,7 +8,7 @@
 #include "threadqueue.h"
 
 
-#define MSGPOOL_SIZE 256
+#define MSGPOOL_SIZE 512
 
 struct msglist {
     struct threadmsg msg;
