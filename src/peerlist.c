@@ -350,3 +350,16 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
     }
     return peerlist_get_by_local_ipv6_addr(&_local_ipv6_addr_n, peer);
 }
+
+int
+override_base_ipv4_addr_p(const char *ipv4)
+{
+   struct in_addr ipv4_n;
+    if (!inet_pton(AF_INET, ipv4, &ipv4_n)) {
+        fprintf(stderr, "Bad IPv4 address format: %s\n", ipv4);
+        return -1;
+    }
+    memcpy(&base_ipv4_addr, &ipv4_n, sizeof(struct in_addr));
+    return 0;
+}
+

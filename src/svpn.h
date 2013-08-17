@@ -43,6 +43,7 @@ typedef struct thread_opts {
     int sock4;
     int sock6;
     int tap;
+    int translate;
     char mac[6];
     const char *local_ip4;
     const char *local_ip6;

@@ -58,7 +58,7 @@ udp_send_thread(void *data)
     unsigned char buf[BUFLEN];
     unsigned char enc_buf[BUFLEN];
     struct peer_state *peer = NULL;
-    int peercount, is_ipv6;
+    int peercount, is_ipv4;
 
     while (1) {
         if ((rcount = read(tap, buf, BUFLEN)) < 0) {
@@ -75,7 +75,7 @@ udp_send_thread(void *data)
             };
 
             peercount= peerlist_get_by_local_ipv4_addr(&local_ipv4_addr, &peer);
-            is_ipv6 = 0;
+            is_ipv4 = 1;
         } else if ((buf[14] >> 4) == 0x06) { // ipv6 packet
 #ifdef DEBUG
             printf("T >> (ipv6) %d\n", rcount);
@@ -84,9 +84,9 @@ udp_send_thread(void *data)
             memcpy(&local_ipv6_addr.s6_addr, buf + 38, 16);
 
             peercount= peerlist_get_by_local_ipv6_addr(&local_ipv6_addr, &peer);
-            is_ipv6 = 1;
+            is_ipv4 = 0;
         } else {
-            fprintf(stderr, "Warning: unknown IP packet type: 0x%x\n", buf[14]);
+            fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
             continue;
         }
 
@@ -106,15 +106,10 @@ udp_send_thread(void *data)
         int i;
         for(i = 0; i < peercount; i++) {
             set_headers(enc_buf, peerlist_local.id, peer[i].id);
-            if (!is_ipv6) { // IPv4 Packet
-                // IPv4 has no security mechanism in place at the moment
-                // IPv4 needs in-packet address translation
+            if (is_ipv4 && opts->translate) {
                 translate_packet(buf, NULL, NULL, rcount);
                 memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-            } else { // IPv6 Packet
-                // IPv6 will typically use IPSec for security
-                // (not handled by us)
-                // Send the data without encrypting it ourselves:
+            } else {
                 memcpy(enc_buf + BUF_OFFSET, buf, rcount);
             }
 
@@ -197,23 +192,22 @@ udp_recv_thread(void *data)
 
         rcount -= BUF_OFFSET;
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
-        if ((buf[14] >> 4) == 0x04) { // IPv4 Packet
+        if ((buf[14] >> 4) == 0x04 && opts->translate) {
 #ifdef DEBUG
             printf("R << (ipv4) %d\n", rcount);
 #endif
-            // no encryption handling yet
             translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                              (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                              rcount);
             translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                               (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                               rcount);
-        } else if ((buf[14] >> 4) == 0x06) { // IPv6 Packet
+        } else if ((buf[14] >> 4) == 0x06 || !opts->translate) {
 #ifdef DEBUG
             printf("R << (ipv6) %d\n", rcount);
 #endif
         } else {
-            fprintf(stderr, "Warning: unknown IP packet type: 0x%x\n", buf[14]);
+            fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
             continue;
         }
         translate_mac(buf, opts->mac);

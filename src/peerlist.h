@@ -68,6 +68,8 @@ int peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
+
+int override_base_ipv4_addr_p(const char *ipv4);
 #ifdef __cplusplus
 }
 #endif
