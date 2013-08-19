@@ -53,10 +53,10 @@ udp_send_thread(void *data)
     int tap = opts->tap;
     struct threadqueue *queue = opts->send_queue;
 
-    int rcount;
-
+    int rcount, ncount;
     unsigned char buf[BUFLEN];
     unsigned char enc_buf[BUFLEN];
+    unsigned char null_peer_id[ID_SIZE] = {'0'};
     struct peer_state *peer = NULL;
     int peercount, is_ipv4;
 
@@ -73,7 +73,6 @@ udp_send_thread(void *data)
             struct in_addr local_ipv4_addr = {
                 .s_addr = *(unsigned long *)(buf + 30)
             };
-
             peercount= peerlist_get_by_local_ipv4_addr(&local_ipv4_addr, &peer);
             is_ipv4 = 1;
         } else if ((buf[14] >> 4) == 0x06) { // ipv6 packet
@@ -82,7 +81,6 @@ udp_send_thread(void *data)
 #endif
             struct in6_addr local_ipv6_addr;
             memcpy(&local_ipv6_addr.s6_addr, buf + 38, 16);
-
             peercount= peerlist_get_by_local_ipv6_addr(&local_ipv6_addr, &peer);
             is_ipv4 = 0;
         } else {
@@ -90,6 +88,7 @@ udp_send_thread(void *data)
             continue;
         }
 
+        ncount = rcount + BUF_OFFSET;
         if (peercount >= 0) {
             if (peercount == 0)
                 peercount = 1; // non-multicast, so only one peer
@@ -98,20 +97,28 @@ udp_send_thread(void *data)
             else
                 peercount--; // multicast, variable peercount
         } else {
+            if (queue != NULL) {
+                set_headers(enc_buf, peerlist_local.id, null_peer_id);
+                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
+                if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
+                    fprintf(stderr, "thread queue error\n");
+                    pthread_exit(NULL);
+                }
+                if (opts->send_signal != NULL) {
+                  opts->send_signal(queue);
+                }
+            }
             continue; // non-multicast, no peers found
         }
 
-        int ncount = rcount + BUF_OFFSET;
         // translate and send all the packets
         int i;
         for(i = 0; i < peercount; i++) {
             set_headers(enc_buf, peerlist_local.id, peer[i].id);
             if (is_ipv4 && opts->translate) {
                 translate_packet(buf, NULL, NULL, rcount);
-                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-            } else {
-                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
             }
+            memcpy(enc_buf + BUF_OFFSET, buf, rcount);
 
             if (queue != NULL) {
                 if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
