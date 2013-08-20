@@ -67,18 +67,12 @@ udp_send_thread(void *data)
         }
 
         if ((buf[14] >> 4) == 0x04) { // ipv4 packet
-#ifdef DEBUG
-            printf("T >> (ipv4) %d\n", rcount);
-#endif
             struct in_addr local_ipv4_addr = {
                 .s_addr = *(unsigned long *)(buf + 30)
             };
             peercount= peerlist_get_by_local_ipv4_addr(&local_ipv4_addr, &peer);
             is_ipv4 = 1;
         } else if ((buf[14] >> 4) == 0x06) { // ipv6 packet
-#ifdef DEBUG
-            printf("T >> (ipv6) %d\n", rcount);
-#endif
             struct in6_addr local_ipv6_addr;
             memcpy(&local_ipv6_addr.s6_addr, buf + 38, 16);
             peercount= peerlist_get_by_local_ipv6_addr(&local_ipv6_addr, &peer);
@@ -189,36 +183,21 @@ udp_recv_thread(void *data)
             fprintf(stderr, "upd recv failed\n");
             break;
         }
-        get_headers(dec_buf, source_id, dest_id);
-
-        if (peerlist_get_by_id(source_id, &peer) < 0) {
-            fprintf(stderr, "Received data from unknown peer with id: '%s'. "
-                            "Ignoring.\n", source_id);
-            continue;
-        }
 
         rcount -= BUF_OFFSET;
+        get_headers(dec_buf, source_id, dest_id);
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
-        if ((buf[14] >> 4) == 0x04 && opts->translate) {
-#ifdef DEBUG
-            printf("R << (ipv4) %d\n", rcount);
-#endif
+        int peer_found = peerlist_get_by_id(source_id, &peer);
+
+        if ((buf[14] >> 4) == 0x04 && opts->translate && peer_found != -1) {
             translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                              (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                              rcount);
             translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                               (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                               rcount);
-        } else if ((buf[14] >> 4) == 0x06 || !opts->translate) {
-#ifdef DEBUG
-            printf("R << (ipv6) %d\n", rcount);
-#endif
-        } else {
-            fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
-            continue;
         }
         translate_mac(buf, opts->mac);
-        // Write the buffered data back to the TAP device
         if (write(tap, buf, rcount) < 0) {
             fprintf(stderr, "write to tap error\n");
             break;
