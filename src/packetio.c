@@ -45,7 +45,7 @@
  * off through a socket to the relevant peer(s).
  */
 void *
-udp_send_thread(void *data)
+svpn_send_thread(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
@@ -56,7 +56,7 @@ udp_send_thread(void *data)
     int rcount, ncount;
     unsigned char buf[BUFLEN];
     unsigned char enc_buf[BUFLEN];
-    unsigned char null_peer_id[ID_SIZE] = {'0'};
+    char null_peer_id[ID_SIZE] = {'0'};
     struct peer_state *peer = NULL;
     int peercount, is_ipv4;
 
@@ -153,7 +153,7 @@ udp_send_thread(void *data)
  * writes it to the local tap device, making the traffic show up locally.
  */
 void *
-udp_recv_thread(void *data)
+svpn_recv_thread(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
@@ -167,8 +167,8 @@ udp_recv_thread(void *data)
 
     unsigned char buf[BUFLEN];
     unsigned char dec_buf[BUFLEN];
-    char source_id[ID_SIZE+1] = { 0 };
-    char dest_id[ID_SIZE+1] = { 0 };
+    char source_id[ID_SIZE] = { 0 };
+    char dest_id[ID_SIZE] = { 0 };
     struct peer_state *peer = NULL;
 
     while (1) {
@@ -188,6 +188,7 @@ udp_recv_thread(void *data)
         get_headers(dec_buf, source_id, dest_id);
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
         int peer_found = peerlist_get_by_id(source_id, &peer);
+        fprintf(stderr, "peer found %d\n", peer_found);
 
         if ((buf[14] >> 4) == 0x04 && opts->translate && peer_found != -1) {
             translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),

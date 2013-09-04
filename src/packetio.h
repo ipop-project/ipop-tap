@@ -32,8 +32,8 @@
 extern "C" {
 #endif
 
-void *udp_send_thread(void *data);
-void *udp_recv_thread(void *data);
+void *svpn_send_thread(void *data);
+void *svpn_recv_thread(void *data);
 
 #ifdef __cplusplus
 }

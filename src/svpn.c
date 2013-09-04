@@ -49,37 +49,12 @@
 #include "packetio.h"
 #include "svpn.h"
 
-static int process_inputs(thread_opts_t *opts, char *inputs[]);
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
                                  char *address);
 static int add_peer_json(json_t *peer_json);
 static void main_help(const char *executable);
 static void main_bad_arg(const char *executable, const char *arg);
 int main(int argc, const char **argv);
-
-static int
-process_inputs(thread_opts_t *opts, char **inputs)
-{
-    char id[ID_SIZE+1] = { 0 };
-
-    if (strcmp(inputs[0], "setid") == 0) {
-        peerlist_set_local_p(inputs[1], opts->local_ip4, opts->local_ip6);
-        printf("id = %s ipv4 = %s ipv6 = %s\n",
-               inputs[1], opts->local_ip4, opts->local_ip6);
-    }
-    else if (strcmp(inputs[0], "add") == 0) {
-        peerlist_add_p(inputs[1], inputs[2], inputs[3], atoi(inputs[4]));
-        strncpy(id, inputs[1], ID_SIZE);
-        struct peer_state *peer;
-        peerlist_get_by_id(id, &peer);
-        printf("id = %s ip = %s port = %s\n", id,
-               inet_ntoa(*(struct in_addr*)(&peer->local_ipv4_addr)),
-               inputs[4]);
-    } else {
-        fprintf(stderr, "Unrecognized Command: '%s'\n", inputs[0]);
-    }
-    return 0;
-}
 
 /**
  * Generates a string containing an IPv6 address with the given prefix. Maximum
@@ -118,6 +93,7 @@ add_peer_json(json_t* peer_json) {
         return -1;
     }
 
+    // TODO - Update id to be hex_encoded string
     const char *id = json_string_value(id_json);
     const char *dest_ipv4 = json_string_value(ipv4_json);
 
@@ -384,51 +360,9 @@ main(int argc, const char *argv[])
     }
 
     pthread_t send_thread, recv_thread;
-    pthread_create(&send_thread, NULL, udp_send_thread, &opts);
-    pthread_create(&recv_thread, NULL, udp_recv_thread, &opts);
-#ifndef EN_INPUT
+    pthread_create(&send_thread, NULL, svpn_send_thread, &opts);
+    pthread_create(&recv_thread, NULL, svpn_recv_thread, &opts);
     pthread_join(recv_thread, NULL);
-#else
-    // sockets do not work after nobody on Android
-    int input_socket;
-    uint16_t iport = port - 1;
-    if ((input_socket = 
-             socket_utils_create_ipv4_udp_socket("127.0.0.1", iport)) < 0) {
-      fprintf(stderr, "socket failed at %d port\n", iport);
-      return -1;
-    }
-
-    struct sockaddr_in s_addr;
-    socklen_t len = sizeof(s_addr);
-    char buf[MAXBUF] = {'0'};;
-    char* inputs[5];
-    int i, j, n;
-
-    while (1) {
-        n = recvfrom(input_socket, buf, sizeof(buf), 0, 
-                     (struct sockaddr*) &s_addr, &len);
-        if (n < 0) {
-            fprintf(stderr, "read failed\n");
-            return -1;
-        }
-
-        // overwrites last character
-        buf[n-1] = ' ';
-        i = j = 0;
-        inputs[j++] = buf + i;
-
-        while (buf[i] != '\0' && i < sizeof(buf)/sizeof(char)) {
-            if (buf[i] == ' ') {
-                buf[i] = '\0';
-                inputs[j++] = buf + i + 1;
-
-                if (j == sizeof(inputs)/sizeof(char *)) break;
-            }
-            i++;
-        }
-        process_inputs(&opts, inputs);
-    }
-#endif
     return 0;
 }
 

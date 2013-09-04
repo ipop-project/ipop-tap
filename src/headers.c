@@ -41,11 +41,7 @@ get_headers(const unsigned char *buf, char *source_id, char *dest_id)
 int
 set_headers(unsigned char *buf, const char *source_id, const char *dest_id)
 {
-    // some weird handling goes on here to ensure we get a null terminated
-    // string out
-    memcpy(buf, source_id, ID_SIZE-1);
-    buf[ID_SIZE-1] = '\0';
-    memcpy(buf + ID_SIZE, dest_id, ID_SIZE-1);
-    buf[ID_SIZE*2-1] = '\0';
+    memcpy(buf, source_id, ID_SIZE);
+    memcpy(buf + ID_SIZE, dest_id, ID_SIZE);
     return 0;
 }

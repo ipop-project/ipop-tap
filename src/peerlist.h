@@ -39,7 +39,7 @@ extern "C" {
 #endif
 
 struct peer_state {
-    char id[ID_SIZE+1]; // Human readable string identifier
+    char id[ID_SIZE]; // 160bit unique identifier
     struct in_addr local_ipv4_addr; // the virtual IPv4 address that we see
     struct in6_addr local_ipv6_addr; // the virtual IPv6 address that we see
     struct in_addr dest_ipv4_addr;  // the actual address to send data to

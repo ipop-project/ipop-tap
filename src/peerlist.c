@@ -51,7 +51,7 @@ static struct peer_state *sequential_table_entries; // used with multicast
 // only a double pointer (**peer), so we can't write back a double pointer, only
 // a single (*).
 static int table_entries_length = 0;
-static char local_id[ID_SIZE+1]; // +1 for \0
+static char local_id[ID_SIZE]; // +1 for \0
 static struct in_addr local_ipv4_addr; // Our virtual IPv4 address
 static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 // With IPv4 addresses, each peer is assigned sequentially, as to prevent
@@ -64,6 +64,22 @@ static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 static struct in_addr base_ipv4_addr; // iterated when adding a peer, is
                                       // assigned to peer
 struct peer_state peerlist_local; // used to publicly expose the local peer info
+
+static int
+convert_to_hex_string(const char *source, int source_len,
+                      char *dest, int dest_len)
+{
+    if (dest_len <= source_len * 2) {
+        fprintf(stderr, "dest_len %d has to be greater 2x source_len %d\n",
+                dest_len, source_len);
+        return -1;
+    }
+    int i;
+    for (i = 0; i < source_len; i++) {
+        sprintf(dest + (2*i), "%02X", source[i]);
+    }
+    return 0;
+}
 
 /**
  * Returns 0 on success, -1 on failure.
@@ -109,18 +125,15 @@ increment_base_ipv4_addr()
 }
 
 /**
- * Adds this local machine to the peerlist, given a (human-readable) string
- * indentifier and a local IPv4/6 address pair.
+ * Adds this local machine to the peerlist, given a unique 160-bit id
+ * identifier and a local IPv4/6 address pair.
  */
 int
 peerlist_set_local(const char *_local_id,
                    const struct in_addr *_local_ipv4_addr,
                    const struct in6_addr *_local_ipv6_addr)
 {
-    if (strlen(local_id) > ID_SIZE) {
-        fprintf(stderr, "Bad local_id. Too long.\n"); return -1;
-    }
-    strcpy(local_id, _local_id);
+    memcpy(local_id, _local_id, ID_SIZE);
     memcpy(&local_ipv4_addr, _local_ipv4_addr, sizeof(struct in_addr));
     memcpy(&base_ipv4_addr,  _local_ipv4_addr, sizeof(struct in_addr));
     increment_base_ipv4_addr();
@@ -133,7 +146,7 @@ peerlist_set_local(const char *_local_id,
     }
 
     // initialize the local peer struct
-    strcpy(peerlist_local.id, local_id);
+    memcpy(peerlist_local.id, local_id, ID_SIZE);
     peerlist_local.local_ipv4_addr = local_ipv4_addr;
     peerlist_local.local_ipv6_addr = local_ipv6_addr;
     peerlist_local.dest_ipv4_addr = dest_ipv4_addr;
@@ -143,8 +156,8 @@ peerlist_set_local(const char *_local_id,
 }
 
 /**
- * Adds this local machine to the peerlist, given a (human-readable) string
- * indentifier and a local IPv4/6 address pair. Addresses are given as strings.
+ * Adds this local machine to the peerlist, given a unique 160-bit id
+ * identifier and a local IPv4/6 address pair. Addresses are given as strings.
  */
 int
 peerlist_set_local_p(const char *_local_id, const char *_local_ipv4_addr_p,
@@ -179,16 +192,12 @@ int
 peerlist_add(const char *id, const struct in_addr *dest_ipv4,
              const struct in6_addr *dest_ipv6, const uint16_t port)
 {
-    if (strlen(id) > ID_SIZE) {
-        fprintf(stderr, "Bad id. Too long.\n"); return -1;
-    }
-
     // create and populate a peer structure
     struct peer_state *peer = malloc(sizeof(struct peer_state));
     if (peer == NULL) {
         fprintf(stderr, "Not enough memory to allocate peer.\n");
     }
-    strcpy(peer->id, id);
+    memcpy(peer->id, id, ID_SIZE);
     memcpy(&peer->local_ipv4_addr, &base_ipv4_addr, sizeof(struct in_addr));
     memcpy(&peer->local_ipv6_addr, dest_ipv6, sizeof(struct in6_addr));
     memcpy(&peer->dest_ipv4_addr, dest_ipv4, sizeof(struct in_addr));
@@ -205,12 +214,15 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     // space for the keys.
     const int ipv4_key_length = 4*4;
     const int ipv6_key_length = 8*5;
+    const int id_key_length = ID_SIZE * 2 + 1;
     char *ipv4_key = malloc(ipv4_key_length * sizeof(char));
     char *ipv6_key = malloc(ipv6_key_length * sizeof(char));
+    char *id_key = malloc(id_key_length * sizeof(char));
 
     // Enter everything into our tables:
     // id_table
-    table_entry.key = peer->id;
+    convert_to_hex_string(peer->id, ID_SIZE, id_key, id_key_length);
+    table_entry.key = id_key;
     if (!hsearch_r(table_entry, ENTER, &retval, id_table)) {
         fprintf(stderr, "Ran out of space in peerlist table.\n"); return -1;
     }
@@ -256,7 +268,7 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 }
 
 /**
- * Given a string human-readable identifier, gives back a pointer to the
+ * Given a unique 160-bit identifier, gives back a pointer to the
  * internal `peer_state` struct representation of the related peer. The
  * underlining struct should be treated as immutable, as changing it could
  * interfere with the hash-table mechanism used internally. Returns 0 on
@@ -265,15 +277,13 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 int
 peerlist_get_by_id(const char *id, struct peer_state **peer)
 {
-    ENTRY *result, query;
-    query.key = malloc((strlen(id)+1) * sizeof(char));
-    strcpy(query.key, id);
-    if (!hsearch_r(query, FIND, &result, id_table)) {
-        free(query.key);
-        return -1;
-    }
+    ENTRY *result;
+    const int id_key_length = ID_SIZE * 2 + 1;
+    char key[id_key_length];
+    convert_to_hex_string(id, ID_SIZE, key, id_key_length);
+    ENTRY query = { .key = key };
+    if (!hsearch_r(query, FIND, &result, id_table)) return -1;
     *peer = result->data;
-    free(query.key);
     return 0;
 }
 
