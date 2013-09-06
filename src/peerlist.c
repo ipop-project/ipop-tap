@@ -74,9 +74,10 @@ convert_to_hex_string(const char *source, int source_len,
                 dest_len, source_len);
         return -1;
     }
-    int i;
+    unsigned int i, j;
     for (i = 0; i < source_len; i++) {
-        sprintf(dest + (2*i), "%02X", source[i]);
+        j = source[i];
+        sprintf(dest + (2*i), "%02X", j);
     }
     return 0;
 }
