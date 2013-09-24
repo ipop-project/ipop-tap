@@ -187,14 +187,16 @@ svpn_recv_thread(void *data)
         rcount -= BUF_OFFSET;
         get_headers(dec_buf, source_id, dest_id);
         memcpy(buf, dec_buf + BUF_OFFSET, rcount);
-        int peer_found = peerlist_get_by_id(source_id, &peer);
-        if ((buf[14] >> 4) == 0x04 && opts->translate && peer_found != -1) {
-            translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
-                             (char *)(&peerlist_local.local_ipv4_addr.s_addr),
-                             rcount);
-            translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
-                              (char *)(&peerlist_local.local_ipv4_addr.s_addr),
-                              rcount);
+        if ((buf[14] >> 4) == 0x04 && opts->translate) {
+            int peer_found = peerlist_get_by_id(source_id, &peer);
+            if (peer_found != -1) {
+                translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
+                                (char *)(&peerlist_local.local_ipv4_addr.s_addr),
+                                rcount);
+                translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
+                                  (char *)(&peerlist_local.local_ipv4_addr.s_addr),
+                                  rcount);
+            }
         }
         translate_mac(buf, opts->mac);
         if (write(tap, buf, rcount) < 0) {
