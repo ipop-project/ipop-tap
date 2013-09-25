@@ -26,31 +26,22 @@
  */
 
 
-#define _GNU_SOURCE // needed for search.h
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include "../lib/hsearch/search.h" // hash tables!
 #include "peerlist.h"
 
-static size_t table_length;
-static struct hsearch_data *id_table;
-static struct hsearch_data *ipv4_addr_table;
-static struct hsearch_data *ipv6_addr_table;
-// We can't iterate a hashtable, so we have to keep track of entries separately:
-static struct peer_state **table_entries;
-static struct peer_state *sequential_table_entries; // used with multicast
-// `sequential_table_entries` is just table_entries, but with one less level of
-// indirection. `table_entries` is useful if we decide we later want to free the
-// data within the hashtables, as we need the right pointers.
-// `sequential_table_entries` is needed when we return after being given a
-// multicast address, because peerlist_get_by_local_ipv4_addr's peer argument is
-// only a double pointer (**peer), so we can't write back a double pointer, only
-// a single (*).
-static int table_entries_length = 0;
+#include "../lib/klib/khash.h"
+
+KHASH_MAP_INIT_STR(pmap, struct peer_state*)
+
+static khash_t(pmap) *id_table;
+static khash_t(pmap) *ipv4_addr_table;
+static khash_t(pmap) *ipv6_addr_table;
+
 static char local_id[ID_SIZE]; // +1 for \0
 static struct in_addr local_ipv4_addr; // Our virtual IPv4 address
 static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
@@ -88,28 +79,10 @@ convert_to_hex_string(const char *source, int source_len,
 int
 peerlist_init(size_t _table_length)
 {
-    table_length = _table_length;
-    int hsds = sizeof(struct hsearch_data);
-    // allocate space for all our needed tables
-    if ((id_table =                 calloc(table_length, hsds)) == NULL ||
-        (ipv4_addr_table =          calloc(table_length, hsds)) == NULL ||
-        (ipv6_addr_table =          calloc(table_length, hsds)) == NULL ||
-        (table_entries =            malloc(table_length *
-                                        sizeof(struct peer_state *))) == NULL ||
-        (sequential_table_entries = malloc(table_length *
-                                        sizeof(struct peer_state))) == NULL)
-    {
-        fprintf(stderr, "Could not allocate memory for peerlist tables.\n");
-        return -1;
-    }
-    // initialize the tables now that we allocated the space
-    if (!hcreate_r(table_length, id_table) ||
-        !hcreate_r(table_length, ipv4_addr_table) ||
-        !hcreate_r(table_length, ipv6_addr_table))
-    {
-        fprintf(stderr, "Could not initialize peerlist tables.\n");
-        return -1;
-    }
+    // init hash table
+    id_table = kh_init(pmap);
+    ipv4_addr_table = kh_init(pmap);
+    ipv6_addr_table = kh_init(pmap);
     return 0;
 }
 
@@ -204,11 +177,6 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     memcpy(&peer->dest_ipv4_addr, dest_ipv4, sizeof(struct in_addr));
     peer->port = port;
 
-    ENTRY table_entry = {
-        .data = peer
-    };
-    ENTRY* retval;
-
     // Allocate space for our keys:
     // hsearch requires our keys to be null-terminated strings, so we convert
     // in_addr and in6_addr values with inet_ntop first, but we need to allocate
@@ -220,27 +188,46 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     char *ipv6_key = malloc(ipv6_key_length * sizeof(char));
     char *id_key = malloc(id_key_length * sizeof(char));
 
+    int ret;
+    khint_t k;
+
     // Enter everything into our tables:
     // id_table
     convert_to_hex_string(peer->id, ID_SIZE, id_key, id_key_length);
-    table_entry.key = id_key;
-    if (!hsearch_r(table_entry, ENTER, &retval, id_table)) {
-        fprintf(stderr, "Ran out of space in peerlist table.\n"); return -1;
+    k = kh_put(pmap, id_table, id_key, &ret);
+    if (ret == -1) {
+        fprintf(stderr, "put failed for id_table.\n"); return -1;
     }
+    else if (!ret) {
+        free(&kh_key(id_table, k));
+        free(kh_value(id_table, k));
+        kh_del(pmap, id_table, k);
+    }
+    kh_value(id_table, k) = peer;
 
     // ipv4_addr_table:
     inet_ntop(AF_INET, &peer->local_ipv4_addr, ipv4_key, ipv4_key_length);
-    table_entry.key = ipv4_key;
-    hsearch_r(table_entry, ENTER, &retval, ipv4_addr_table);
+    k = kh_put(pmap, ipv4_addr_table, ipv4_key, &ret);
+    if (ret == -1) {
+        fprintf(stderr, "put failed for ipv4_table.\n"); return -1;
+    }
+    else if (!ret) {
+        free(&kh_key(ipv4_addr_table, k));
+        kh_del(pmap, ipv4_addr_table, k);
+    }
+    kh_value(ipv4_addr_table, k) = peer;
 
     // ipv6_addr_table:
     inet_ntop(AF_INET6, &peer->local_ipv6_addr, ipv6_key, ipv6_key_length);
-    table_entry.key = ipv6_key;
-    hsearch_r(table_entry, ENTER, &retval, ipv6_addr_table);
-
-    table_entries[table_entries_length] = peer;
-    sequential_table_entries[table_entries_length] = *peer;
-    table_entries_length++;
+    k = kh_put(pmap, ipv6_addr_table, ipv6_key, &ret);
+    if (ret == -1) {
+        fprintf(stderr, "put failed for ipv6_table.\n"); return -1;
+    }
+    else if (!ret) {
+        free(&kh_key(ipv6_addr_table, k));
+        kh_del(pmap, ipv6_addr_table, k);
+    }
+    kh_value(ipv6_addr_table, k) = peer;
 
     increment_base_ipv4_addr(); // only actually increment on success
     return 0;
@@ -278,13 +265,12 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 int
 peerlist_get_by_id(const char *id, struct peer_state **peer)
 {
-    ENTRY *result;
     const int id_key_length = ID_SIZE * 2 + 1;
     char key[id_key_length];
     convert_to_hex_string(id, ID_SIZE, key, id_key_length);
-    ENTRY query = { .key = key };
-    if (!hsearch_r(query, FIND, &result, id_table)) return -1;
-    *peer = result->data;
+    khint_t k = kh_get(pmap, id_table, key);
+    if (k == kh_end(id_table)) return -1;
+    *peer = kh_value(id_table, k);
     return 0;
 }
 
@@ -304,15 +290,14 @@ peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
     unsigned char end_byte =
         ((unsigned char *)(&_local_ipv4_addr->s_addr))[3];
     if ((start_byte >= 224 && start_byte <= 239) || end_byte == 0xFF) {
-        *peer = sequential_table_entries;
-        return table_entries_length + 1;
+        *peer = 0;
+        return -1;
     }
-    ENTRY *result;
     char key[4*4];
     inet_ntop(AF_INET, _local_ipv4_addr, key, sizeof(key)/sizeof(char));
-    ENTRY query = { .key = key };
-    if (!hsearch_r(query, FIND, &result, ipv4_addr_table)) return -1;
-    *peer = result->data;
+    khint_t k = kh_get(pmap, ipv4_addr_table, key);
+    if (k == kh_end(ipv4_addr_table)) return -1;
+    *peer = kh_value(ipv4_addr_table, k);
     return 0;
 }
 
@@ -338,15 +323,15 @@ peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
     if (bytes[0] == 0xFF && (type == 0x05 || type == 0x08 || type == 0x0e)) {
         // if it is an IPv6 multicast address by the rules given by
         // https://en.wikipedia.org/wiki/Multicast_address#IPv6
-        *peer = sequential_table_entries;
-        return table_entries_length + 1;
+        // TODO - implement properly
+        *peer = 0;
+        return -1;
     }
-    ENTRY *result;
     char key[5*8];
     inet_ntop(AF_INET6, _local_ipv6_addr, key, sizeof(key)/sizeof(char));
-    ENTRY query = { .key = key };
-    if (!hsearch_r(query, FIND, &result, ipv6_addr_table)) return -1;
-    *peer = result->data;
+    khint_t k = kh_get(pmap, ipv6_addr_table, key);
+    if (k == kh_end(ipv6_addr_table)) return -1;
+    *peer = kh_value(ipv6_addr_table, k);
     return 0;
 }
 
