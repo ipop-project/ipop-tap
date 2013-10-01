@@ -1,5 +1,5 @@
 /*
- * svpn-core
+ * ipop-tap
  * Copyright 2013, University of Florida
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@
 #include "headers.h"
 #include "translator.h"
 #include "tap.h"
-#include "svpn.h"
+#include "ipop_tap.h"
 #include "packetio.h"
 
 /**
@@ -45,7 +45,7 @@
  * off through a socket to the relevant peer(s).
  */
 void *
-svpn_send_thread(void *data)
+ipop_send_thread(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
@@ -153,7 +153,7 @@ svpn_send_thread(void *data)
  * writes it to the local tap device, making the traffic show up locally.
  */
 void *
-svpn_recv_thread(void *data)
+ipop_recv_thread(void *data)
 {
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;

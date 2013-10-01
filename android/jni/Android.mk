@@ -5,7 +5,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := svpn
+LOCAL_MODULE := ipop-tap
 
 LOCAL_CFLAGS += -D DROID_BUILD --std=gnu99
 

@@ -1,5 +1,5 @@
 /*
- * svpn-core
+ * ipop-tap
  * Copyright 2013, University of Florida
  *
  * Redistribution and use in source and binary forms, with or without
@@ -77,7 +77,7 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
  * hardware device to explicitly bind to. This can be found by running
  * `if_nametoindex` on the device name, for example:
  *
- *     u_int32_t scope_id = if_nametoindex("svpn0");
+ *     u_int32_t scope_id = if_nametoindex("ipop0");
  */
 int
 socket_utils_create_ipv6_udp_socket(const uint16_t port, u_int32_t scope_id)

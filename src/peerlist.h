@@ -1,5 +1,5 @@
 /*
- * svpn-core
+ * ipop-tap
  * Copyright 2013, University of Florida
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
 
 #include <arpa/inet.h>
 
-// normally these values are defined in svpn.h:
+// normally these values are defined in ipop_tap.h:
 #define ID_SIZE 20
 #define ADDR_SIZE 32
 

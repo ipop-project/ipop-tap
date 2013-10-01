@@ -1,5 +1,5 @@
 /*
- * svpn-core
+ * ipop-tap
  * Copyright 2013, University of Florida
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
 #include "headers.h"
 #include "socket_utils.h"
 #include "packetio.h"
-#include "svpn.h"
+#include "ipop_tap.h"
 
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
                                  char *address);
@@ -142,12 +142,12 @@ main_help(const char *executable)
     printf("    -6:            The virtual IPv6 address to use on the tap\n"
            "                   device. Must begin with 'fd50:0dbc:41f2:4a3c'.\n"
            "                   (default: randomly generated)\n");
-    printf("    -p, --port:    The UDP port used by svpn to send and receive\n"
+    printf("    -p, --port:    The UDP port used by ipop to send and receive\n"
            "                   packet data. (default: 5800)\n");
     printf("    -t, --tap:     The name of the system tap device to use. If\n"
            "                   you're using multiple clients on the same\n"
            "                   machine, device names must be different. Max\n"
-           "                   length of %d characters. (default: 'svpn0')\n",
+           "                   length of %d characters. (default: 'ipop0')\n",
                                IFNAMSIZ-1);
     printf("    -v, --verbose: Print out extra information about what's\n"
            "                   happening.\n");
@@ -290,7 +290,7 @@ main(int argc, const char *argv[])
         generate_ipv6_address("fd50:0dbc:41f2:4a3c", 64, ipv6_addr);
     if (ipv4_addr[0] == '\0') strcpy(ipv4_addr, "172.31.0.100");
     if (port == 0) port = 5800;
-    if (tap_device_name[0] == '\0') strcpy(tap_device_name, "svpn0");
+    if (tap_device_name[0] == '\0') strcpy(tap_device_name, "ipop0");
 
     if (verbose) {
         // pretty-print the client configuration
@@ -360,8 +360,8 @@ main(int argc, const char *argv[])
     }
 
     pthread_t send_thread, recv_thread;
-    pthread_create(&send_thread, NULL, svpn_send_thread, &opts);
-    pthread_create(&recv_thread, NULL, svpn_recv_thread, &opts);
+    pthread_create(&send_thread, NULL, ipop_send_thread, &opts);
+    pthread_create(&recv_thread, NULL, ipop_recv_thread, &opts);
     pthread_join(recv_thread, NULL);
     return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * svpn-core
+ * ipop-tap
  * Copyright 2013, University of Florida
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,8 +32,8 @@
 extern "C" {
 #endif
 
-void *svpn_send_thread(void *data);
-void *svpn_recv_thread(void *data);
+void *ipop_send_thread(void *data);
+void *ipop_recv_thread(void *data);
 
 #ifdef __cplusplus
 }

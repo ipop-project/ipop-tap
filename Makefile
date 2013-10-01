@@ -13,7 +13,7 @@ LIBS=-lpthread # flags for dynamically linked libraries
 CC_BUILD=$(CC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \
          $(STATIC_LIB_DIR)/*/*.c \
 		 $(foreach dir,$(wildcard $(STATIC_LIB_DIR)/*),-I$(dir)) $(LIBS) \
-         -o "$(BIN_DIR)/svpn"
+         -o "$(BIN_DIR)/ipop-tap"
 
 all: build
 
