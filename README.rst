@@ -1,8 +1,8 @@
 ======================================
-SocialVPN Core - A P2P VPN for Friends
+IPOP Tap
 ======================================
 
-This is the core module for SocialVPN that performs all packet-level operations,
+This is the tap module for IPOP that performs all packet-level operations,
 translating packets, setting up, and reading and writing from and to the TAP
 device.
 
@@ -48,13 +48,11 @@ On Debian GNU/Linux (and derivatives)
 -------------------------------------
 
 .. note::
-   You will need to run these commands as root. SocialVPN will drop privileges
-   to ``nobody`` after initialization.
 
 1. Make a new ``config.json`` file based on ``config.json.example``.
 2. Starting in the base repository directory::
        
-       sudo ./bin/svpn
+       sudo ./bin/ipop-tap
 
 .. note::
    You can see information on command-line arguments that the program supports
