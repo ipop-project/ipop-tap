@@ -56,7 +56,7 @@ static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 // will be no collisions, and thus there will be no disparity or translation!
 static struct in_addr base_ipv4_addr; // iterated when adding a peer, is
                                       // assigned to peer
-static struct peer_state null_peer = { .id = {'0'} };
+static struct peer_state null_peer = { .id = {0} };
 struct peer_state peerlist_local; // used to publicly expose the local peer info
 
 
