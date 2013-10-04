@@ -304,7 +304,7 @@ main(int argc, const char *argv[])
     // Initialize the peerlist for possible peers we might add
     // This can only be done after we're sure we resolved the ipv4 and ipv6
     // addresses, but it must be done before we add any peers
-    peerlist_init(TABLE_SIZE);
+    peerlist_init();
     peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
 
     if (json_is_object(config_json)) {
