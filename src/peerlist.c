@@ -41,6 +41,8 @@ KHASH_MAP_INIT_STR(pmap, struct peer_state*)
 static khash_t(pmap) *id_table;
 static khash_t(pmap) *ipv4_addr_table;
 static khash_t(pmap) *ipv6_addr_table;
+static khint_t ipv4_iterator;
+static khint_t ipv6_iterator;
 
 static char local_id[ID_SIZE]; // +1 for \0
 static struct in_addr local_ipv4_addr; // Our virtual IPv4 address
@@ -54,7 +56,9 @@ static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 // will be no collisions, and thus there will be no disparity or translation!
 static struct in_addr base_ipv4_addr; // iterated when adding a peer, is
                                       // assigned to peer
+static struct peer_state null_peer = { .id = {'0'} };
 struct peer_state peerlist_local; // used to publicly expose the local peer info
+
 
 static int
 convert_to_hex_string(const char *source, int source_len,
@@ -77,12 +81,20 @@ convert_to_hex_string(const char *source, int source_len,
  * Returns 0 on success, -1 on failure.
  */
 int
-peerlist_init(size_t _table_length)
+peerlist_init()
 {
     // init hash table
     id_table = kh_init(pmap);
     ipv4_addr_table = kh_init(pmap);
     ipv6_addr_table = kh_init(pmap);
+    return 0;
+}
+
+int
+peerlist_reset_iterators()
+{
+    ipv4_iterator = kh_begin(ipv4_addr_table);
+    ipv6_iterator = kh_begin(ipv6_addr_table);
     return 0;
 }
 
@@ -274,13 +286,6 @@ peerlist_get_by_id(const char *id, struct peer_state **peer)
     return 0;
 }
 
-/**
- * Returns -1 on failure, 0 on a normal return, length+1 on multicast, where
- * length is the length of the array written back to `peer`. No underlying data
- * written back to `peer` should be modified, to preserve the internal state of
- * the peerlist. length+1 must be returned in the case that length is 0,
- * preventing a case of ambiguity.
- */
 int
 peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
                                 struct peer_state **peer)
@@ -290,14 +295,21 @@ peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
     unsigned char end_byte =
         ((unsigned char *)(&_local_ipv4_addr->s_addr))[3];
     if ((start_byte >= 224 && start_byte <= 239) || end_byte == 0xFF) {
-        *peer = 0;
+        for (; ipv4_iterator < kh_end(ipv4_addr_table); ++ipv4_iterator) {
+            if (kh_exist(ipv4_addr_table, ipv4_iterator)) {
+                *peer = kh_value(ipv4_addr_table, ipv4_iterator++);
+                return 1;
+            }
+        }
         return -1;
     }
     char key[4*4];
     inet_ntop(AF_INET, _local_ipv4_addr, key, sizeof(key)/sizeof(char));
     khint_t k = kh_get(pmap, ipv4_addr_table, key);
-    if (k == kh_end(ipv4_addr_table)) return -1;
-    *peer = kh_value(ipv4_addr_table, k);
+    if (k != kh_end(ipv4_addr_table) && kh_exist(ipv4_addr_table, k)) {
+        *peer = kh_value(ipv4_addr_table, k);
+    }
+    else { *peer = &null_peer; }
     return 0;
 }
 
@@ -323,15 +335,21 @@ peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
     if (bytes[0] == 0xFF && (type == 0x05 || type == 0x08 || type == 0x0e)) {
         // if it is an IPv6 multicast address by the rules given by
         // https://en.wikipedia.org/wiki/Multicast_address#IPv6
-        // TODO - implement properly
-        *peer = 0;
+        for (; ipv6_iterator != kh_end(ipv6_addr_table); ++ipv6_iterator) {
+            if (kh_exist(ipv6_addr_table, ipv6_iterator)) {
+                *peer = kh_value(ipv6_addr_table, ipv6_iterator++);
+                return 1;
+            }
+        }
         return -1;
     }
     char key[5*8];
     inet_ntop(AF_INET6, _local_ipv6_addr, key, sizeof(key)/sizeof(char));
     khint_t k = kh_get(pmap, ipv6_addr_table, key);
-    if (k == kh_end(ipv6_addr_table)) return -1;
-    *peer = kh_value(ipv6_addr_table, k);
+    if (k != kh_end(ipv6_addr_table) && kh_exist(ipv6_addr_table, k)) {
+        *peer = kh_value(ipv6_addr_table, k);
+    }
+    else { *peer = &null_peer; }
     return 0;
 }
 

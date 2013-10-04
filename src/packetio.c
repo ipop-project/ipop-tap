@@ -56,9 +56,10 @@ ipop_send_thread(void *data)
     int rcount, ncount;
     unsigned char buf[BUFLEN];
     unsigned char enc_buf[BUFLEN];
-    char null_peer_id[ID_SIZE] = {'0'};
+    struct in_addr local_ipv4_addr;
+    struct in6_addr local_ipv6_addr;
     struct peer_state *peer = NULL;
-    int peercount, is_ipv4;
+    int result, is_ipv4;
 
     while (1) {
         if ((rcount = read(tap, buf, BUFLEN)) < 0) {
@@ -67,15 +68,10 @@ ipop_send_thread(void *data)
         }
 
         if ((buf[14] >> 4) == 0x04) { // ipv4 packet
-            struct in_addr local_ipv4_addr = {
-                .s_addr = *(unsigned long *)(buf + 30)
-            };
-            peercount= peerlist_get_by_local_ipv4_addr(&local_ipv4_addr, &peer);
+            memcpy(&local_ipv4_addr.s_addr, buf + 30, 4);
             is_ipv4 = 1;
         } else if ((buf[14] >> 4) == 0x06) { // ipv6 packet
-            struct in6_addr local_ipv6_addr;
             memcpy(&local_ipv6_addr.s6_addr, buf + 38, 16);
-            peercount= peerlist_get_by_local_ipv6_addr(&local_ipv6_addr, &peer);
             is_ipv4 = 0;
         } else {
             fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
@@ -83,37 +79,23 @@ ipop_send_thread(void *data)
         }
 
         ncount = rcount + BUF_OFFSET;
-        if (peercount >= 0) {
-            if (peercount == 0)
-                peercount = 1; // non-multicast, so only one peer
-            else if (peercount == 1)
-                continue; // multicast, but no peers are connected
-            else
-                peercount--; // multicast, variable peercount
-        } else {
-            if (queue != NULL) {
-                set_headers(enc_buf, peerlist_local.id, null_peer_id);
-                memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-                if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
-                    fprintf(stderr, "thread queue error\n");
-                    pthread_exit(NULL);
-                }
-                if (opts->send_signal != NULL) {
-                  opts->send_signal(queue);
-                }
+        peerlist_reset_iterators();
+        while (1) {
+            if (is_ipv4) {
+                result = peerlist_get_by_local_ipv4_addr(&local_ipv4_addr,
+                                                         &peer);
             }
-            continue; // non-multicast, no peers found
-        }
-
-        // translate and send all the packets
-        int i;
-        for(i = 0; i < peercount; i++) {
-            set_headers(enc_buf, peerlist_local.id, peer[i].id);
+            else {
+                result = peerlist_get_by_local_ipv6_addr(&local_ipv6_addr,
+                                                         &peer);
+            }
+            if (result == -1) break;
+            set_headers(enc_buf, peerlist_local.id, peer->id);
             if (is_ipv4 && opts->translate) {
                 translate_packet(buf, NULL, NULL, rcount);
             }
+            // TODO - Remove this extra copy
             memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-
             if (queue != NULL) {
                 if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
                     fprintf(stderr, "thread queue error\n");
@@ -122,23 +104,23 @@ ipop_send_thread(void *data)
                 if (opts->send_signal != NULL) {
                   opts->send_signal(queue);
                 }
-                continue;
             }
-
-            struct sockaddr_in dest_ipv4_addr_sock = {
-                .sin_family = AF_INET,
-                .sin_port = htons(peer[i].port),
-                .sin_addr = peer[i].dest_ipv4_addr,
-                .sin_zero = { 0 }
-            };
-
-            // send our processed packet off
-            if (sendto(sock4, enc_buf, rcount, 0,
-                       (struct sockaddr *)(&dest_ipv4_addr_sock),
-                       sizeof(struct sockaddr_in)) < 0) {
-                fprintf(stderr, "sendto failed\n");
-                pthread_exit(NULL);
+            else {
+                struct sockaddr_in dest_ipv4_addr_sock = {
+                    .sin_family = AF_INET,
+                    .sin_port = htons(peer->port),
+                    .sin_addr = peer->dest_ipv4_addr,
+                    .sin_zero = { 0 }
+                };
+                // send our processed packet off
+                if (sendto(sock4, enc_buf, rcount, 0,
+                           (struct sockaddr *)(&dest_ipv4_addr_sock),
+                           sizeof(struct sockaddr_in)) < 0) {
+                    fprintf(stderr, "sendto failed\n");
+                   pthread_exit(NULL);
+                }
             }
+            if (result == 0) break;
         }
     }
 

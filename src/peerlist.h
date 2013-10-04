@@ -49,7 +49,8 @@ struct peer_state {
 extern struct peer_state peerlist_local; // used to publicly expose the local
                                          // peer info
 
-int peerlist_init(size_t _table_length);
+int peerlist_init();
+int peerlist_reset_iterators();
 int peerlist_set_local(const char *_local_id,
                        const struct in_addr *_local_ipv4_addr,
                        const struct in6_addr *_local_ipv6_addr);
