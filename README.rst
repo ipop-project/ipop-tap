@@ -14,10 +14,11 @@ On Debian GNU/Linux (and derivatives)
 
 1. Check to make sure you have OpenSSL installed (as root)::
       
-      sudo aptitude install libssl-dev openssl
+      sudo aptitude install libssl-dev openssl libjansson-dev gyp
    
 2. Build the software (doesn't need root)::
       
+      gyp build/ipop_tap.gyp --depth .
       make
 
 On Android (Mobile, ARM)

@@ -28,7 +28,7 @@
 #ifndef _SVPN_H_
 #define _SVPN_H_
 
-#include "../lib/threadqueue/threadqueue.h"
+#include <threadqueue.h>
 
 #define MTU 1280
 #define BUFLEN 2048

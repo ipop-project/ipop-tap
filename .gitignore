@@ -1,5 +1,7 @@
 android/libs/
 android/obj/
-src/build/
-bin/
+out/
 ipv6_addr
+Makefile
+build/*.mk
+build/*.Makefile

@@ -34,7 +34,7 @@
 
 #include "peerlist.h"
 
-#include "../lib/klib/khash.h"
+#include <khash.h>
 
 KHASH_MAP_INIT_STR(pmap, struct peer_state*)
 
