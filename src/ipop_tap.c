@@ -405,5 +405,3 @@ main(int argc, const char *argv[])
 
     return EXIT_SUCCESS;
 }
-
-#undef BAD_ARG
