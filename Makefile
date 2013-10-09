@@ -28,4 +28,3 @@ clean:
 
 init: clean
 	mkdir -p bin
-	cp certs/* bin
