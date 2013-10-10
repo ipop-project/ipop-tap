@@ -36,6 +36,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <linux/limits.h>
 #include <pwd.h>
 
@@ -48,12 +49,12 @@
 #include "socket_utils.h"
 #include "packetio.h"
 #include "ipop_tap.h"
+#include "utils.h"
 
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
                                  char *address);
 static int add_peer_json(json_t *peer_json);
 static void main_help(const char *executable);
-static void main_bad_arg(const char *executable, const char *arg);
 int main(int argc, const char **argv);
 
 /**
@@ -153,15 +154,6 @@ main_help(const char *executable)
            "                   happening.\n");
 }
 
-static void
-main_bad_arg(const char *executable, const char* arg)
-{
-    fprintf(stderr, "Bad argument: '%s'\n", arg);
-    main_help(executable);
-}
-
-#define BAD_ARG {main_bad_arg(argv[0], a); return -1;}
-
 /**
  * Performs (in order) argument processing, configuration file processing, sets
  * default arguments for any settings left unset, spawns the threads for sending
@@ -175,11 +167,13 @@ main(int argc, const char *argv[])
     // mark the various configurable options as unset or as their defaults
     // (dependent on how the option must be manipulated)
     char config_file[PATH_MAX]; strcpy(config_file, "config.json");
-    char client_id[ID_SIZE]; client_id[0] = '\0';
-    char ipv4_addr[4*4]; ipv4_addr[0] = '\0';
-    char ipv6_addr[8*5]; ipv6_addr[0] = '\0';
+    char client_id[ID_SIZE] = { 0 };
+    char ipv4_addr[4*4] = { 0 };
+    char ipv6_addr[8*5] = { 0 };
     uint16_t port = 0;
-    char tap_device_name[IFNAMSIZ]; tap_device_name[0] = '\0';
+
+    char tap_device_name[IFNAMSIZ] = { 0 };
+
     int verbose = 0;
 
     // Ideally we'd define defaults first, then configuration file stuff, then
@@ -187,43 +181,82 @@ main(int argc, const char *argv[])
     // set in the arguments, so they must be parsed first.
 
     // read in settings from command line arguments
-    for (int i = 1; i < argc; i++) {
-        const char *a = argv[i];
-        if (strcmp(a, "-c") == 0 || strcmp(a, "--config") == 0) {
-            if (++i < argc && strlen(argv[i]) < sizeof(config_file)) {
-                strcpy(config_file, argv[i]);
-            } else BAD_ARG
-        } else if (strcmp(a, "-i") == 0 || strcmp(a, "--id") == 0) {
-            if (++i < argc && strlen(argv[i]) < sizeof(client_id)) {
-                strcpy(client_id, argv[i]);
-            } else BAD_ARG
-        } else if (strcmp(a, "-4") == 0) {
-            if (++i < argc && strlen(argv[i]) < sizeof(ipv4_addr)) {
-                strcpy(ipv4_addr, argv[i]);
-            } else BAD_ARG
-        } else if (strcmp(a, "-6") == 0) {
-            if (++i < argc && strlen(argv[i]) < sizeof(ipv6_addr)) {
-                strcpy(ipv6_addr, argv[i]);
-            } else BAD_ARG
-        } else if (strcmp(a, "-p") == 0 || strcmp(a, "--port") == 0) {
-            if (++i < argc) {
-                port = (uint16_t) atoi(argv[i]);
-            } else BAD_ARG
-        } else if (strcmp(a, "-t") == 0 || strcmp(a, "--tap") == 0) {
-            if (++i < argc && strlen(argv[i]) < sizeof(tap_device_name)) {
-                strcpy(tap_device_name, argv[i]);
-            } else BAD_ARG
-        } else if (strcmp(a, "-v") == 0 || strcmp(a, "--verbose") == 0) {
-            verbose = 1;
-        } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
-            main_help(argv[0]);
-            return 0;
-        } else BAD_ARG
+    char* short_options = "c:i:4:6:p:t:vh";
+
+    static const struct option long_options[] = {
+        {"config", required_argument, 0, 'c'},
+        {"id", required_argument, 0, 'i'},
+        {"ipv4", required_argument, 0, '4'},
+        {"ipv6", required_argument, 0, '6'},
+        {"port", required_argument, 0, 'p'},
+        {"tap", required_argument, 0, 't'},
+        {"verbose", no_argument, 0, 'v'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+    
+    int current;
+    int option_index = 0;
+
+    while ((current = getopt_long(argc,
+                                  (char* const *)argv,     
+                                  short_options,
+                                  long_options,
+                                  &option_index)) != -1) {
+        switch (current) {
+            case 'c':
+                strcpy(config_file, optarg);
+                break;
+                
+            case 'i':
+                strcpy(client_id, optarg);
+                break;
+            
+            case '4':
+                strcpy(ipv4_addr, optarg);
+                break;
+                
+            case '6':
+                strcpy(ipv6_addr, optarg);
+                break;
+                
+            case 'p':
+                port = (uint16_t)atoi(optarg);
+                break;
+                
+            case 't':
+                strcpy(tap_device_name, optarg);
+                break;
+                
+            case 'v':
+                verbose = 1;
+                break;
+                
+            case 'h':
+                main_help(argv[0]);
+                return EXIT_SUCCESS;
+                break;
+                
+            default:
+                main_help(argv[0]);
+                return EXIT_FAILURE;
+        }
+        
+    }
+    
+    // consume any stray arguments as unrecognized options
+    if (optind < argc) {
+        while (optind < argc)
+            fprintf(stderr, "%s: unrecognized option: '%s'\n", 
+                            argv[0], argv[optind++]);
+            
+        main_help(argv[0]);
+        
+        return EXIT_FAILURE;
     }
 
-
+    // parse the configuration file
     json_t *config_json = NULL;
-    // read in settings from the json config file
     if (access(config_file, R_OK) == 0) {
         json_error_t config_json_err;
         config_json = json_load_file(config_file, 0, &config_json_err);
@@ -231,32 +264,32 @@ main(int argc, const char *argv[])
             fprintf(stderr, "JSON Error: %s (%d, %d) %s: %s\n", config_file,
                     config_json_err.line, config_json_err.column,
                     config_json_err.source, config_json_err.text);
-            return -1;
+            return EXIT_FAILURE;
         } else {
             if (client_id[0] == '\0') {
                 const char *str =
                     json_string_value(json_object_get(config_json, "id"));
                 if (str != NULL) {
-                    strncpy(client_id, str, sizeof(client_id)-1);
-                    client_id[sizeof(client_id)-1] = '\0';
+                    strlcpy(client_id, str, (sizeof client_id)-1);
                 }
             }
+            
             if (ipv4_addr[0] == '\0') {
                 const char *str = json_string_value(
                     json_object_get(config_json, "ipv4_addr"));
                 if (str != NULL) {
-                    strncpy(ipv4_addr, str, sizeof(ipv4_addr)-1);
-                    ipv4_addr[sizeof(ipv4_addr)-1] = '\0';
+                    strlcpy(ipv4_addr, str, (sizeof ipv4_addr)-1);
                 }
             }
+            
             if (ipv6_addr[0] == '\0') {
                 const char *str = json_string_value(
                     json_object_get(config_json, "ipv6_addr"));
                 if (str != NULL) {
-                    strncpy(ipv6_addr, str, sizeof(ipv6_addr)-1);
-                    ipv6_addr[sizeof(ipv6_addr)-1] = '\0';
+                    strlcpy(ipv6_addr, str, (sizeof ipv6_addr)-1);
                 }
             }
+
             if (port == 0) {
                 json_t *port_json = json_object_get(config_json, "port");
                 if (port_json != NULL) {
@@ -264,19 +297,21 @@ main(int argc, const char *argv[])
                     // gives 0 on error, which (fortunately) is what we want
                 }
             }
+            
             if (tap_device_name[0] == '\0') {
                 const char *str =
                     json_string_value(json_object_get(config_json, "tap_name"));
                 if (str != NULL) {
-                    strncpy(tap_device_name, str, sizeof(tap_device_name));
-                    tap_device_name[sizeof(tap_device_name)-1] = '\0';
+                    strlcpy(tap_device_name, str, (sizeof tap_device_name)-1);
                 }
             }
         }
-    } else if (verbose) {
-        fprintf(stderr,
-                "Warning: Configuration file '%s' not found or not openable.\n",
-                config_file);
+        
+    } else {
+        if (verbose)
+            fprintf(stderr,
+                    "Warning: Cannot read configuration file: '%s'\n",
+                    config_file);
     }
 
     // set uninitialized values to their defaults
@@ -347,15 +382,19 @@ main(int argc, const char *argv[])
     if (getuid() == 0) {
         if (setgid(pwd->pw_uid) < 0) {
             fprintf(stderr, "setgid failed\n");
-            close(opts.sock4); close(opts.sock6);
+            close(opts.sock4);
+            close(opts.sock6);
             tap_close();
-            return -1;
+            
+            return EXIT_FAILURE;
         }
         if (setuid(pwd->pw_gid) < 0) {
             fprintf(stderr, "setuid failed\n");
-            close(opts.sock4); close(opts.sock6);
+            close(opts.sock4);
+            close(opts.sock6);
             tap_close();
-            return -1;
+            
+            return EXIT_FAILURE;
         }
     }
 
@@ -363,7 +402,6 @@ main(int argc, const char *argv[])
     pthread_create(&send_thread, NULL, ipop_send_thread, &opts);
     pthread_create(&recv_thread, NULL, ipop_recv_thread, &opts);
     pthread_join(recv_thread, NULL);
-    return 0;
-}
 
-#undef BAD_ARG
+    return EXIT_SUCCESS;
+}
