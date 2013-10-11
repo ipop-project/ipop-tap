@@ -419,7 +419,7 @@ override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
 {
    struct in_addr local_ipv4_addr_n;
 #ifndef WIN32
-    if (!inet_pton(AF_INET, _local_ipv4_addr_p, &loca_ipv4_addr_n)) {
+    if (!inet_pton(AF_INET, _local_ipv4_addr_p, &local_ipv4_addr_n)) {
 #else
     if(!RtlIpv4StringToAddress(_local_ipv4_addr_p, FALSE, NULL,
                                &local_ipv4_addr_n)) {

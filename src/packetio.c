@@ -134,6 +134,7 @@ ipop_send_thread(void *data)
     close(sock6);
     tap_close();
     //pthread_exit(NULL);
+    return NULL;
 }
 
 /**
@@ -197,5 +198,6 @@ ipop_recv_thread(void *data)
     close(sock6);
     tap_close();
     //pthread_exit(NULL);
+    return NULL;
 }
 
