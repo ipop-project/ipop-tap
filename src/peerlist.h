@@ -28,7 +28,14 @@
 #ifndef _PEERLIST_H_
 #define _PEERLIST_H_
 
+#ifndef WIN32
 #include <arpa/inet.h>
+#else
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdint.h>
+#endif
 
 // normally these values are defined in ipop_tap.h:
 #define ID_SIZE 20

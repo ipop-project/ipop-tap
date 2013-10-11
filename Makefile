@@ -1,6 +1,7 @@
 # build with: make
 # run with:   sudo make exec
 CC=gcc
+MINGWCC=i686-w64-mingw32-gcc
 CFLAGS=-Wall --std=gnu99
 CFLAGS_DEPLOY=-O3
 CFLAGS_DEBUG=-g -O0 -D DEBUG # Include debug symbols, disable optimizations, etc
@@ -15,6 +16,11 @@ CC_BUILD=$(CC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \
 		 $(foreach dir,$(wildcard $(STATIC_LIB_DIR)/*),-I$(dir)) $(LIBS) \
          -o "$(BIN_DIR)/ipop-tap"
 
+MINGWCC_BUILD=$(MINGWCC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \
+         $(STATIC_LIB_DIR)/*/*.c \
+		 $(foreach dir,$(wildcard $(STATIC_LIB_DIR)/*),-I$(dir)) \
+         -o "$(BIN_DIR)/ipop-tap" -lws2_32 -lntdll
+
 all: build
 
 build: init
@@ -22,6 +28,9 @@ build: init
 
 debug: init
 	$(CC_BUILD) $(CFLAGS_DEBUG)
+
+win32: init
+	$(MINGWCC_BUILD) $(CFLAGS_DEBUG) -D WIN32
 
 clean:
 	rm -rf bin

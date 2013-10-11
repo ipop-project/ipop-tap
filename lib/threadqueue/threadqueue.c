@@ -1,9 +1,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <pthread.h>
 #include <sys/time.h>
 #include <stdio.h>
+
+#ifndef WIN32
+#include <pthread.h>
+#else
+#include <windows.h>
+#endif
 
 #include "threadqueue.h"
 
@@ -53,11 +58,14 @@ static inline void release_msglist(struct threadqueue *queue,
 
 int thread_queue_init(struct threadqueue *queue)
 {
+#ifndef WIN32
     int ret = 0;
+#endif
     if (queue == NULL) {
         return EINVAL;
     }
     memset(queue, 0, sizeof(struct threadqueue));
+#ifndef WIN32
     ret = pthread_cond_init(&queue->cond, NULL);
     if (ret != 0) {
         return ret;
@@ -68,6 +76,17 @@ int thread_queue_init(struct threadqueue *queue)
         pthread_cond_destroy(&queue->cond);
         return ret;
     }
+#else
+    queue->cond = CreateEvent(NULL, TRUE, FALSE, TEXT("WriteEvent"));
+    if (queue->cond == NULL) {
+        return -1;
+    }
+
+    queue->mutex = CreateMutex(NULL, FALSE, NULL);
+    if (queue->mutex == NULL) {
+        return -1;
+    }
+#endif
 
     return 0;
 
@@ -76,10 +95,19 @@ int thread_queue_init(struct threadqueue *queue)
 int thread_queue_add(struct threadqueue *queue, void *data, long msgtype)
 {
     struct msglist *newmsg;
+#ifndef WIN32
     pthread_mutex_lock(&queue->mutex);
+#else
+    // This function returns a DWORD but we don't use it
+    WaitForSingleObject(queue->mutex, INFINITE);
+#endif
     newmsg = get_msglist(queue);
     if (newmsg == NULL) {
+#ifndef WIN32
         pthread_mutex_unlock(&queue->mutex);
+#else
+        ReleaseMutex(queue->mutex);
+#endif
         return ENOMEM;
     }
     newmsg->msg.data = data;
@@ -95,10 +123,17 @@ int thread_queue_add(struct threadqueue *queue, void *data, long msgtype)
     }
 
         if(queue->length == 0)
+#ifndef WIN32
                 pthread_cond_broadcast(&queue->cond);
+#else
+                SetEvent(queue->cond);
+#endif
     queue->length++;
+#ifndef WIN32
     pthread_mutex_unlock(&queue->mutex);
-
+#else
+    ReleaseMutex(queue->mutex);
+#endif
     return 0;
 
 }
@@ -107,7 +142,9 @@ int thread_queue_get(struct threadqueue *queue, const struct timespec *timeout,
 struct threadmsg *msg)
 {
     struct msglist *firstrec;
+#ifndef WIN32
     int ret = 0;
+#endif
     struct timespec abstimeout;
 
     if (queue == NULL || msg == NULL) {
@@ -125,10 +162,15 @@ struct threadmsg *msg)
         }
     }
 
+#ifndef WIN32
     pthread_mutex_lock(&queue->mutex);
+#else
+    WaitForSingleObject(queue->mutex, INFINITE);
+#endif
 
     /* Will wait until awakened by a signal or broadcast */
     //Need to loop to handle spurious wakeups
+#ifndef WIN32
     while (queue->first == NULL && ret != ETIMEDOUT) {  
         if (timeout) {
             ret = pthread_cond_timedwait(&queue->cond, &queue->mutex,
@@ -142,6 +184,11 @@ struct threadmsg *msg)
         pthread_mutex_unlock(&queue->mutex);
         return ret;
     }
+#else
+    while (queue->first == NULL) {  
+        WaitForSingleObject(queue->cond, INFINITE);
+    }
+#endif
 
     firstrec = queue->first;
     queue->first = queue->first->next;
@@ -158,7 +205,11 @@ struct threadmsg *msg)
         msg->qlength = queue->length;
 
     release_msglist(queue,firstrec);
+#ifndef WIN32
     pthread_mutex_unlock(&queue->mutex);
+#else
+    ReleaseMutex(queue->mutex);
+#endif
 
     return 0;
 }
@@ -174,7 +225,11 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata)
         return EINVAL;
     }
 
+#ifndef WIN32
     pthread_mutex_lock(&queue->mutex);
+#else
+    WaitForSingleObject(queue->mutex, INFINITE);
+#endif
     recs[0] = queue->first;
     recs[1] = queue->msgpool;
     for(i = 0; i < 2 ; i++) {
@@ -189,9 +244,15 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata)
         }
     }
 
+#ifndef WIN32
     pthread_mutex_unlock(&queue->mutex);
     ret = pthread_mutex_destroy(&queue->mutex);
     pthread_cond_destroy(&queue->cond);
+#else
+    ReleaseMutex(queue->mutex);
+    CloseHandle(queue->mutex);
+    CloseHandle(queue->cond);
+#endif
 
     return ret;
 
@@ -201,9 +262,17 @@ long thread_queue_length(struct threadqueue *queue)
 {
     long counter;
     // get the length properly
+#ifndef WIN32
     pthread_mutex_lock(&queue->mutex);
+#else
+    WaitForSingleObject(queue->mutex, INFINITE);
+#endif
     counter = queue->length;
+#ifndef WIN32
     pthread_mutex_unlock(&queue->mutex);
+#else
+    ReleaseMutex(queue->mutex);
+#endif
     return counter;
 
 }
@@ -212,16 +281,22 @@ long thread_queue_length(struct threadqueue *queue)
 int thread_queue_bput(struct threadqueue *queue, const void *data, size_t len)
 {
     int retval = 0;
+#ifndef WIN32
     struct timespec req, rem;
     req.tv_sec = 0;
     req.tv_nsec = 1000;
+#endif
 
     void *queue_data = malloc(len);
     memcpy(queue_data, data, len);
 
     while (1) {
         retval = thread_queue_add(queue, queue_data, len);
+#ifndef WIN32
         if (retval == ENOMEM) nanosleep(&req, &rem);
+#else
+        if (retval == ENOMEM) Sleep(1);
+#endif
         else break;
     }
     return retval;

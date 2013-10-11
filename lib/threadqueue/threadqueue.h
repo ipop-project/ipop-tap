@@ -4,7 +4,11 @@
 #ifndef _THREADQUEUE_H_
 #define _THREADQUEUE_H_ 1
 
+#ifndef WIN32
 #include <pthread.h>
+#else
+#include <windows.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,7 +65,6 @@ struct threadmsg{
 
 };
 
-
 /**
  * A TthreadQueue
  *
@@ -79,11 +82,19 @@ struct threadqueue {
 /**
  * Mutex for the queue, never touch.
  */
+#ifndef WIN32
         pthread_mutex_t mutex;
+#else
+        HANDLE mutex;
+#endif
 /**
  * Condition variable for the queue, never touch.
  */
+#ifndef WIN32
         pthread_cond_t cond;
+#else
+        HANDLE cond;
+#endif
 /**
  * Internal pointers for the queue, never touch.
  */

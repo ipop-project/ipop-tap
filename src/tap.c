@@ -33,6 +33,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
+#ifndef WIN32
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -42,10 +44,11 @@
 #include <net/route.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#endif
 
 #include "tap.h"
 
-#ifndef DROID_BUILD
+#if !(defined DROID_BUILD || defined WIN32)
 
 struct in6_ifreq {
     struct in6_addr ifr6_addr;
@@ -56,17 +59,20 @@ struct in6_ifreq {
 #endif
 
 static int tap_set_flags(short enable, short disable);
+#ifndef WIN32
 static int tap_set_proc_option(const sa_family_t family, const char *option,
                                const char *value);
+#endif
 static void tap_plen_to_ipv4_mask(unsigned int prefix_len,
                                   struct sockaddr* writeback);
-
 // We must "waste" a couple sockets in order to set all the options we want:
 static int ipv4_configuration_socket = -1;
 static int ipv6_configuration_socket = -1;
 // the ifreq structure stores arguments for ioctl calls, we'll just make one in
 // open_tap and use it multiple times throughout (see also: 'man netdevice')
+#ifndef WIN32
 static struct ifreq ifr;
+#endif
 static int fd = -1; // The file descriptor used by the current TAP device
 
 // define the path of the tun device (platform specific)
@@ -86,6 +92,7 @@ static int fd = -1; // The file descriptor used by the current TAP device
 int
 tap_open(const char *device, char *mac)
 {
+#ifndef WIN32
     if ((fd = open(TUN_PATH, O_RDWR)) < 0) {
         fprintf(stderr, "Opening %s failed. (Are we not root?)\n", TUN_PATH);
         tap_close(); return -1;
@@ -127,6 +134,9 @@ tap_open(const char *device, char *mac)
 
     memcpy(mac, ifr.ifr_hwaddr.sa_data, 6); // ifr_hwaddr is a sockaddr struct
     return fd;
+#else
+    return 0;
+#endif
 }
 
 /**
@@ -140,6 +150,7 @@ tap_open(const char *device, char *mac)
 static int
 tap_set_flags(short enable, short disable)
 {
+#ifndef WIN32
     // read the current flag states
     if (ioctl(ipv6_configuration_socket, SIOCGIFFLAGS, &ifr) < 0) {
         fprintf(stderr, "Could not read device flags for TAP device. (Device "
@@ -154,6 +165,7 @@ tap_set_flags(short enable, short disable)
                         "(Are we not root?)\n");
         tap_close(); return -1;
     }
+#endif
     return 0;
 }
 
@@ -167,7 +179,11 @@ tap_set_flags(short enable, short disable)
 int
 tap_set_base_flags()
 {
+#ifndef WIN32
     return tap_set_flags(IFF_NOARP, IFF_MULTICAST | IFF_BROADCAST);
+#else
+    return 0;
+#endif
 }
 
 /**
@@ -176,7 +192,11 @@ tap_set_base_flags()
 int
 tap_set_up()
 {
+#ifndef WIN32
     return tap_set_flags(IFF_UP | IFF_RUNNING, (short)0);
+#else
+    return 0;
+#endif
 }
 
 /**
@@ -185,7 +205,11 @@ tap_set_up()
 int
 tap_down_down()
 {
+#ifndef WIN32
     return tap_set_flags((short)0, IFF_UP | IFF_RUNNING);
+#else
+    return 0;
+#endif
 }
 
 /**
@@ -199,14 +223,17 @@ tap_down_down()
 int
 tap_set_mtu(int mtu)
 {
+#ifndef WIN32
     ifr.ifr_mtu = mtu;
     if (ioctl(ipv6_configuration_socket, SIOCSIFMTU, &ifr) < 0) {
         fprintf(stderr, "Set MTU failed\n");
         tap_close(); return -1;
     }
+#endif
     return 0;
 }
 
+#ifndef WIN32
 /**
  * Given an IPv6-like prefix length, convert it to an IPv4 hostmask. This lets
  * us use prefix lengths *everywhere* which IMO is cleaner, and provides a more
@@ -229,6 +256,7 @@ tap_plen_to_ipv4_mask(unsigned int prefix_len, struct sockaddr *writeback)
     // we have to wrap our sockaddr_in struct into a sockaddr struct
     memcpy(writeback, &net_mask, sizeof(struct sockaddr));
 }
+#endif
 
 /**
  * Sets the IPv4 address for the device, given a string, such as
@@ -238,6 +266,7 @@ tap_plen_to_ipv4_mask(unsigned int prefix_len, struct sockaddr *writeback)
 int
 tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len)
 {
+#ifndef WIN32
     struct sockaddr_in socket_address = {
         .sin_family = AF_INET,
         .sin_port = 0
@@ -265,7 +294,7 @@ tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len)
         tap_close();
         return -1;
     }
-
+#endif
     return 0;
 }
 
@@ -278,6 +307,7 @@ tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len)
 int
 tap_set_ipv6_addr(const char *presentation, unsigned int prefix_len)
 {
+#ifndef WIN32
     struct sockaddr_in6 socket_address = {
         .sin6_family = AF_INET6,
         .sin6_scope_id = 0,
@@ -307,7 +337,7 @@ tap_set_ipv6_addr(const char *presentation, unsigned int prefix_len)
         tap_close();
         return -1;
     }
-
+#endif
     return 0;
 }
 
@@ -321,6 +351,7 @@ int
 tap_set_ipv4_route(const char *presentation, unsigned short prefix_len,
                    unsigned int metric)
 {
+#ifndef WIN32
     struct rtentry rte = {
         .rt_flags = RTF_UP,
         .rt_dev = ifr.ifr_name,
@@ -342,7 +373,7 @@ tap_set_ipv4_route(const char *presentation, unsigned short prefix_len,
         tap_close();
         return -1;
     }
-
+#endif
     return 0;
 }
 
@@ -358,6 +389,7 @@ int
 tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
                    unsigned int metric)
 {
+#ifndef WIN32
     struct in6_rtmsg rtm6 = {
         .rtmsg_flags = RTF_UP,
         .rtmsg_ifindex = if_nametoindex(ifr.ifr_name),
@@ -379,7 +411,7 @@ tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
         tap_close();
         return -1;
     }
-
+#endif
     return 0;
 }
 
@@ -394,6 +426,7 @@ tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
 int
 tap_disable_ipv6_autoconfig()
 {
+#ifndef WIN32
     // Disable router solicitation, as it isn't needed
     if (tap_set_ipv6_proc_option("accept_redirects", "0") < 0) {
         tap_close(); return -1;
@@ -405,6 +438,7 @@ tap_disable_ipv6_autoconfig()
     if (tap_set_ipv6_proc_option("autoconf", "0") < 0) {
         tap_close(); return -1;
     }
+#endif
     return 0;
 }
 
@@ -418,7 +452,11 @@ tap_disable_ipv6_autoconfig()
 int
 tap_set_ipv6_proc_option(const char *option, const char *value)
 {
+#ifndef WIN32
     return tap_set_proc_option(AF_INET6, option, value);
+#else
+    return 0;
+#endif
 }
 
 /**
@@ -428,9 +466,14 @@ tap_set_ipv6_proc_option(const char *option, const char *value)
 int
 tap_set_ipv4_proc_option(const char *option, const char *value)
 {
+#ifndef WIN32
     return tap_set_proc_option(AF_INET, option, value);
+#else
+    return 0;
+#endif
 }
 
+#ifndef WIN32
 static int
 tap_set_proc_option(const sa_family_t family, const char *option,
                     const char *value)
@@ -451,6 +494,7 @@ tap_set_proc_option(const sa_family_t family, const char *option,
     fclose(proc_fd);
     return 0;
 }
+#endif
 
 /**
  * Closes all the sockets associated with the TAP device, cleaning things up.
@@ -458,12 +502,14 @@ tap_set_proc_option(const sa_family_t family, const char *option,
 void
 tap_close()
 {
+#ifndef WIN32
     if (fd >= 0)
         close(fd);
     if (ipv4_configuration_socket >= 0)
         close(ipv4_configuration_socket);
     if (ipv6_configuration_socket >= 0)
         close(ipv6_configuration_socket);
+#endif
 }
 
 #undef TUN_PATH

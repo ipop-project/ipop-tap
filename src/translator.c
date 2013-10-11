@@ -26,7 +26,13 @@
  */
 
 #include <string.h>
+#ifndef WIN32
 #include <arpa/inet.h>
+#else
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -110,7 +116,12 @@ update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
             if (strncmp("http://172.", buf + i, 11) == 0) {
                 idx = ustate.s_count++;
                 memcpy(tmp, buf + i + 7, 12);
+#ifndef WIN32
                 inet_aton(tmp, (struct in_addr *)ustate.server_ips[idx]);
+#else
+                RtlIpv4AddressToString(tmp,
+                    (struct in_addr *)ustate.server_ips[idx]);
+#endif
                 ustate.s_ports[idx] = atoi(buf + i + 20);
                 sprintf(buf + i + 16, "%d", source[3]);
                 buf[i + 19] = ':';

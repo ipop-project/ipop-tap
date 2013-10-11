@@ -29,8 +29,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
 
 #include "peerlist.h"
 
@@ -126,7 +128,11 @@ peerlist_set_local(const char *_local_id,
     memcpy(&local_ipv6_addr, _local_ipv6_addr, sizeof(struct in6_addr));
     struct in_addr dest_ipv4_addr;
     char ip[] = "127.0.0.1";
+#ifndef WIN32
     if (!inet_pton(AF_INET, ip, &dest_ipv4_addr.s_addr)) {
+#else
+    if(!RtlIpv4StringToAddress(ip, FALSE, NULL, &dest_ipv4_addr.s_addr)) { 
+#endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
         return -1;
     }
@@ -151,11 +157,21 @@ peerlist_set_local_p(const char *_local_id, const char *_local_ipv4_addr_p,
 {
     struct in_addr local_ipv4_addr_n;
     struct in6_addr local_ipv6_addr_n;
+#ifndef WIN32
     if (!inet_pton(AF_INET, _local_ipv4_addr_p, &local_ipv4_addr_n)) {
+#else
+    if(!RtlIpv4StringToAddress(_local_ipv4_addr_p, FALSE, NULL,
+                               &local_ipv4_addr_n)) {
+#endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", _local_ipv4_addr_p);
         return -1;
     }
+#ifndef WIN32
     if (!inet_pton(AF_INET6, _local_ipv6_addr_p, &local_ipv6_addr_n)) {
+#else
+    if(!RtlIpv6StringToAddressEx(_local_ipv6_addr_p, 
+                               &local_ipv6_addr_n, NULL, NULL)) {
+#endif
         fprintf(stderr, "Bad IPv6 address format: %s\n", _local_ipv6_addr_p);
         return -1;
     }
@@ -218,7 +234,11 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     kh_value(id_table, k) = peer;
 
     // ipv4_addr_table:
+#ifndef WIN32
     inet_ntop(AF_INET, &peer->local_ipv4_addr, ipv4_key, ipv4_key_length);
+#else
+    RtlIpv4AddressToString(&peer->local_ipv4_addr, ipv4_key);
+#endif
     k = kh_put(pmap, ipv4_addr_table, ipv4_key, &ret);
     if (ret == -1) {
         fprintf(stderr, "put failed for ipv4_table.\n"); return -1;
@@ -230,7 +250,11 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     kh_value(ipv4_addr_table, k) = peer;
 
     // ipv6_addr_table:
+#ifndef WIN32
     inet_ntop(AF_INET6, &peer->local_ipv6_addr, ipv6_key, ipv6_key_length);
+#else
+    RtlIpv6AddressToString(&peer->local_ipv6_addr, ipv6_key);
+#endif
     k = kh_put(pmap, ipv6_addr_table, ipv6_key, &ret);
     if (ret == -1) {
         fprintf(stderr, "put failed for ipv6_table.\n"); return -1;
@@ -240,7 +264,6 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
         kh_del(pmap, ipv6_addr_table, k);
     }
     kh_value(ipv6_addr_table, k) = peer;
-
     increment_base_ipv4_addr(); // only actually increment on success
     return 0;
 }
@@ -256,11 +279,19 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 {
     struct in_addr dest_ipv4_n;
     struct in6_addr dest_ipv6_n;
+#ifndef WIN32
     if (!inet_pton(AF_INET, dest_ipv4, &dest_ipv4_n)) {
+#else
+    if(!RtlIpv4StringToAddress(dest_ipv4, FALSE, NULL, &dest_ipv4_n)) {
+#endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", dest_ipv4);
         return -1;
     }
+#ifndef WIN32
     if (!inet_pton(AF_INET6, dest_ipv6, &dest_ipv6_n)) {
+#else
+    if(!RtlIpv6StringToAddressEx(dest_ipv6, &dest_ipv6_n, NULL, NULL)) {
+#endif
         fprintf(stderr, "Bad IPv6 address format: %s\n", dest_ipv6);
         return -1;
     }
@@ -304,7 +335,11 @@ peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
         return -1;
     }
     char key[4*4];
+#ifndef WIN32
     inet_ntop(AF_INET, _local_ipv4_addr, key, sizeof(key)/sizeof(char));
+#else
+    RtlIpv4AddressToString(_local_ipv4_addr, key);
+#endif
     khint_t k = kh_get(pmap, ipv4_addr_table, key);
     if (k != kh_end(ipv4_addr_table) && kh_exist(ipv4_addr_table, k)) {
         *peer = kh_value(ipv4_addr_table, k);
@@ -318,7 +353,12 @@ peerlist_get_by_local_ipv4_addr_p(const char *_local_ipv4_addr,
                                   struct peer_state **peer)
 {
     struct in_addr _local_ipv4_addr_n;
+#ifndef WIN32
     if (!inet_pton(AF_INET, _local_ipv4_addr, &_local_ipv4_addr_n)) {
+#else
+    if(!RtlIpv4StringToAddress(_local_ipv4_addr, FALSE, NULL, 
+                               &_local_ipv4_addr_n)) { 
+#endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", _local_ipv4_addr);
         return -1;
     }
@@ -344,7 +384,11 @@ peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
         return -1;
     }
     char key[5*8];
+#ifndef WIN32
     inet_ntop(AF_INET6, _local_ipv6_addr, key, sizeof(key)/sizeof(char));
+#else
+    RtlIpv6AddressToString(_local_ipv6_addr, key);
+#endif
     khint_t k = kh_get(pmap, ipv6_addr_table, key);
     if (k != kh_end(ipv6_addr_table) && kh_exist(ipv6_addr_table, k)) {
         *peer = kh_value(ipv6_addr_table, k);
@@ -358,7 +402,12 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                   struct peer_state **peer)
 {
     struct in6_addr _local_ipv6_addr_n;
+#ifndef WIN32
     if (!inet_pton(AF_INET6, _local_ipv6_addr, &_local_ipv6_addr_n)) {
+#else
+    if(!RtlIpv6StringToAddressEx(_local_ipv6_addr, 
+                               &_local_ipv6_addr_n, NULL, NULL)) { 
+#endif
         fprintf(stderr, "Bad IPv6 address format: %s\n", _local_ipv6_addr);
         return -1;
     }
@@ -366,14 +415,19 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
 }
 
 int
-override_base_ipv4_addr_p(const char *ipv4)
+override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
 {
-   struct in_addr ipv4_n;
-    if (!inet_pton(AF_INET, ipv4, &ipv4_n)) {
-        fprintf(stderr, "Bad IPv4 address format: %s\n", ipv4);
+   struct in_addr local_ipv4_addr_n;
+#ifndef WIN32
+    if (!inet_pton(AF_INET, _local_ipv4_addr_p, &loca_ipv4_addr_n)) {
+#else
+    if(!RtlIpv4StringToAddress(_local_ipv4_addr_p, FALSE, NULL,
+                               &local_ipv4_addr_n)) {
+#endif
+        fprintf(stderr, "Bad IPv4 address format: %s\n", _local_ipv4_addr_p);
         return -1;
     }
-    memcpy(&base_ipv4_addr, &ipv4_n, sizeof(struct in_addr));
+    memcpy(&base_ipv4_addr, &local_ipv4_addr_n, sizeof(struct in_addr));
     return 0;
 }
 

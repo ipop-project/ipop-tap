@@ -28,10 +28,16 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#ifndef WIN32
 #include <sys/socket.h>
 #include <net/if.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#else
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdint.h>
+#endif
 
 #include "peerlist.h"
 #include "headers.h"
@@ -99,7 +105,7 @@ ipop_send_thread(void *data)
             if (queue != NULL) {
                 if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
                     fprintf(stderr, "thread queue error\n");
-                    pthread_exit(NULL);
+                    //pthread_exit(NULL);
                 }
                 if (opts->send_signal != NULL) {
                   opts->send_signal(queue);
@@ -117,7 +123,7 @@ ipop_send_thread(void *data)
                            (struct sockaddr *)(&dest_ipv4_addr_sock),
                            sizeof(struct sockaddr_in)) < 0) {
                     fprintf(stderr, "sendto failed\n");
-                   pthread_exit(NULL);
+                   //pthread_exit(NULL);
                 }
             }
             if (result == 0) break;
@@ -127,7 +133,7 @@ ipop_send_thread(void *data)
     close(sock4);
     close(sock6);
     tap_close();
-    pthread_exit(NULL);
+    //pthread_exit(NULL);
 }
 
 /**
@@ -190,6 +196,6 @@ ipop_recv_thread(void *data)
     close(sock4);
     close(sock6);
     tap_close();
-    pthread_exit(NULL);
+    //pthread_exit(NULL);
 }
 

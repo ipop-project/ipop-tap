@@ -28,10 +28,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <stdint.h>
+#ifndef WIN32
+#include <sys/socket.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#else
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 
 #include "socket_utils.h"
 
@@ -51,14 +56,20 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
         return -1;
     }
 
+#ifndef WIN32
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#endif
 
     memset(&addr, 0, addr_len);
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     //addr.sin_addr.s_addr = INADDR_ANY;
 
+#ifndef WIN32
     if (!inet_pton(AF_INET, ip, &addr.sin_addr.s_addr)) {
+#else
+    if(!RtlIpv4StringToAddress(ip, FALSE, NULL, &addr.sin_addr.s_addr)) {
+#endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
         return -1;
     }
@@ -80,7 +91,7 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
  *     u_int32_t scope_id = if_nametoindex("ipop0");
  */
 int
-socket_utils_create_ipv6_udp_socket(const uint16_t port, u_int32_t scope_id)
+socket_utils_create_ipv6_udp_socket(const uint16_t port, uint32_t scope_id)
 {
     int sock, optval = 1;
     struct sockaddr_in6 addr = {
@@ -97,7 +108,9 @@ socket_utils_create_ipv6_udp_socket(const uint16_t port, u_int32_t scope_id)
         return -1;
     }
 
+#ifndef WIN32
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#endif
 
     if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
         fprintf(stderr, "bind failed\n");

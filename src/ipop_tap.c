@@ -28,17 +28,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h> // used to generate random seed
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <pthread.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <getopt.h>
-#include <linux/limits.h>
+
+#ifndef WIN32
+#include <pthread.h>
+#include <limits.h>
 #include <pwd.h>
+#include <net/if.h>
+#endif
 
 #include <jansson.h>
 
@@ -149,7 +149,11 @@ main_help(const char *executable)
            "                   you're using multiple clients on the same\n"
            "                   machine, device names must be different. Max\n"
            "                   length of %d characters. (default: 'ipop0')\n",
+#ifndef WIN32
                                IFNAMSIZ-1);
+#else
+                               99);
+#endif
     printf("    -v, --verbose: Print out extra information about what's\n"
            "                   happening.\n");
 }
@@ -171,9 +175,11 @@ main(int argc, const char *argv[])
     char ipv4_addr[4*4] = { 0 };
     char ipv6_addr[8*5] = { 0 };
     uint16_t port = 0;
-
-    char tap_device_name[IFNAMSIZ] = { 0 };
-
+#ifndef WIN32
+    char tap_device_name[IFNAMSIZ]; tap_device_name[0] = '\0';
+#else
+    char tap_device_name[100]; tap_device_name[0] = '\0';
+#endif
     int verbose = 0;
 
     // Ideally we'd define defaults first, then configuration file stuff, then
@@ -363,9 +369,11 @@ main(int argc, const char *argv[])
     opts.local_ip4 = ipv4_addr;
     opts.local_ip6 = ipv6_addr;
     opts.sock4 = socket_utils_create_ipv4_udp_socket("0.0.0.0", port);
+#ifndef WIN32
     opts.sock6 = socket_utils_create_ipv6_udp_socket(
         port, if_nametoindex(tap_device_name)
     );
+#endif
     opts.translate = 1;
     opts.send_queue = NULL;
     opts.rcv_queue = NULL;
@@ -377,6 +385,7 @@ main(int argc, const char *argv[])
     tap_set_base_flags();
     tap_set_up();
 
+#ifndef WIN32
     // drop root privileges and set to nobody
     struct passwd * pwd = getpwnam("nobody");
     if (getuid() == 0) {
@@ -402,6 +411,6 @@ main(int argc, const char *argv[])
     pthread_create(&send_thread, NULL, ipop_send_thread, &opts);
     pthread_create(&recv_thread, NULL, ipop_recv_thread, &opts);
     pthread_join(recv_thread, NULL);
-
+#endif
     return EXIT_SUCCESS;
 }
