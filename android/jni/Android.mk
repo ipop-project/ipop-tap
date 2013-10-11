@@ -7,7 +7,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := ipop-tap
 
-LOCAL_CFLAGS += -D DROID_BUILD --std=gnu99
+LOCAL_CFLAGS += -D ANDROID --std=gnu99
 
 LOCAL_C_INCLUDES := ../../src/ $(wildcard ../../lib/*/)
 

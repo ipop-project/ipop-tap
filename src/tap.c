@@ -48,7 +48,7 @@
 
 #include "tap.h"
 
-#if !(defined DROID_BUILD || defined WIN32)
+#if !(defined ANDROID || defined WIN32)
 
 struct in6_ifreq {
     struct in6_addr ifr6_addr;
@@ -76,7 +76,7 @@ static struct ifreq ifr;
 static int fd = -1; // The file descriptor used by the current TAP device
 
 // define the path of the tun device (platform specific)
-#if DROID_BUILD
+#if ANDROID
 #define TUN_PATH "/dev/tun"
 #else
 #define TUN_PATH "/dev/net/tun"
@@ -377,7 +377,7 @@ tap_set_ipv4_route(const char *presentation, unsigned short prefix_len,
     return 0;
 }
 
-#ifndef DROID_BUILD
+#ifndef ANDROID
 
 /**
  * Tells the OS to route IPv6 addresses within the subnet (determined by the
