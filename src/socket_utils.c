@@ -29,11 +29,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#ifndef WIN32
+
+#if defined(LINUX) || defined(ANDROID)
 #include <sys/socket.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#else
+#elif defined(WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #endif
@@ -56,7 +57,7 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
         return -1;
     }
 
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 #endif
 
@@ -65,10 +66,12 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
     addr.sin_port = htons(port);
     //addr.sin_addr.s_addr = INADDR_ANY;
 
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, ip, &addr.sin_addr.s_addr)) {
-#else
-    if(!RtlIpv4StringToAddress(ip, FALSE, NULL, &addr.sin_addr.s_addr)) {
+#elif defined(WIN32)
+    CHAR* Term;
+    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term, &addr.sin_addr.s_addr);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
         return -1;
@@ -108,7 +111,7 @@ socket_utils_create_ipv6_udp_socket(const uint16_t port, uint32_t scope_id)
         return -1;
     }
 
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 #endif
 

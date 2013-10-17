@@ -226,3 +226,34 @@ translate_packet(unsigned char *buf, const char *source, const char *dest,
     update_sip((char*)buf, source, dest, len);
     return 0;
 }
+
+int
+create_arp_response(char *buf)
+{
+    uint16_t *nbuf = (uint16_t *)buf;
+    int i;
+
+    if (buf[40] == 0 && buf[41] == 2) {
+        return -1;
+    }
+
+    for (i = 0; i < 3; i++) {
+        nbuf[i] = nbuf[3 + i];
+        nbuf[3 + i] = 0xFFFF;
+    }
+
+    buf[21] = 0x02;
+
+    for (i = 0; i < 5; i++) {
+        uint16_t tmp = nbuf[16 + i];
+        nbuf[16 + i] = nbuf[11 + i];
+        if (i < 3) {
+            nbuf[11 + i] = 0xFFFF;
+        }
+        else {
+            nbuf[11 + i] = tmp;
+        }
+    }
+    return 0;
+}
+

@@ -40,6 +40,7 @@ int translate_headers(unsigned char *buf, const char *source, const char *dest,
 int translate_packet(unsigned char *buf, const char *source, const char *dest,
                      ssize_t len);
 
+int create_arp_response(char *buf);
 #ifdef __cplusplus
 }
 #endif

@@ -29,7 +29,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef WIN32
+
+#if defined(LINUX) || defined(ANDROID)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #endif
@@ -71,10 +72,9 @@ convert_to_hex_string(const char *source, int source_len,
                 dest_len, source_len);
         return -1;
     }
-    unsigned int i, j;
+    int i;
     for (i = 0; i < source_len; i++) {
-        j = source[i];
-        sprintf(dest + (2*i), "%02X", j);
+        sprintf(dest + (2*i), "%02x", *(source + i) & 0xFF);
     }
     return 0;
 }
@@ -128,10 +128,12 @@ peerlist_set_local(const char *_local_id,
     memcpy(&local_ipv6_addr, _local_ipv6_addr, sizeof(struct in6_addr));
     struct in_addr dest_ipv4_addr;
     char ip[] = "127.0.0.1";
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, ip, &dest_ipv4_addr.s_addr)) {
-#else
-    if(!RtlIpv4StringToAddress(ip, FALSE, NULL, &dest_ipv4_addr.s_addr)) { 
+#elif defined(WIN32)
+    CHAR *Term;
+    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term, &dest_ipv4_addr.s_addr);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
         return -1;
@@ -157,20 +159,25 @@ peerlist_set_local_p(const char *_local_id, const char *_local_ipv4_addr_p,
 {
     struct in_addr local_ipv4_addr_n;
     struct in6_addr local_ipv6_addr_n;
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, _local_ipv4_addr_p, &local_ipv4_addr_n)) {
-#else
-    if(!RtlIpv4StringToAddress(_local_ipv4_addr_p, FALSE, NULL,
-                               &local_ipv4_addr_n)) {
+#elif defined(WIN32)
+    CHAR* Term;
+    LONG err = RtlIpv4StringToAddress(_local_ipv4_addr_p, TRUE, &Term,
+                                      &local_ipv4_addr_n);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", _local_ipv4_addr_p);
         return -1;
     }
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET6, _local_ipv6_addr_p, &local_ipv6_addr_n)) {
-#else
-    if(!RtlIpv6StringToAddressEx(_local_ipv6_addr_p, 
-                               &local_ipv6_addr_n, NULL, NULL)) {
+#elif defined(WIN32)
+    ULONG ScopeId;
+    USHORT Port;
+    err = RtlIpv6StringToAddressEx(_local_ipv6_addr_p, 
+                                   &local_ipv6_addr_n, &ScopeId, &Port);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv6 address format: %s\n", _local_ipv6_addr_p);
         return -1;
@@ -234,9 +241,9 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     kh_value(id_table, k) = peer;
 
     // ipv4_addr_table:
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     inet_ntop(AF_INET, &peer->local_ipv4_addr, ipv4_key, ipv4_key_length);
-#else
+#elif defined(WIN32)
     RtlIpv4AddressToString(&peer->local_ipv4_addr, ipv4_key);
 #endif
     k = kh_put(pmap, ipv4_addr_table, ipv4_key, &ret);
@@ -250,9 +257,9 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     kh_value(ipv4_addr_table, k) = peer;
 
     // ipv6_addr_table:
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     inet_ntop(AF_INET6, &peer->local_ipv6_addr, ipv6_key, ipv6_key_length);
-#else
+#elif defined(WIN32)
     RtlIpv6AddressToString(&peer->local_ipv6_addr, ipv6_key);
 #endif
     k = kh_put(pmap, ipv6_addr_table, ipv6_key, &ret);
@@ -279,18 +286,23 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 {
     struct in_addr dest_ipv4_n;
     struct in6_addr dest_ipv6_n;
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, dest_ipv4, &dest_ipv4_n)) {
-#else
-    if(!RtlIpv4StringToAddress(dest_ipv4, FALSE, NULL, &dest_ipv4_n)) {
+#elif defined(WIN32)
+    CHAR* Term;
+    LONG err = RtlIpv4StringToAddress(dest_ipv4, TRUE, &Term, &dest_ipv4_n);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", dest_ipv4);
         return -1;
     }
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET6, dest_ipv6, &dest_ipv6_n)) {
-#else
-    if(!RtlIpv6StringToAddressEx(dest_ipv6, &dest_ipv6_n, NULL, NULL)) {
+#elif defined(WIN32)
+    ULONG ScopeId;
+    USHORT Port;
+    err = RtlIpv6StringToAddressEx(dest_ipv6, &dest_ipv6_n, &ScopeId, &Port);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv6 address format: %s\n", dest_ipv6);
         return -1;
@@ -335,9 +347,9 @@ peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
         return -1;
     }
     char key[4*4];
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     inet_ntop(AF_INET, _local_ipv4_addr, key, sizeof(key)/sizeof(char));
-#else
+#elif defined(WIN32)
     RtlIpv4AddressToString(_local_ipv4_addr, key);
 #endif
     khint_t k = kh_get(pmap, ipv4_addr_table, key);
@@ -353,10 +365,11 @@ peerlist_get_by_local_ipv4_addr_p(const char *_local_ipv4_addr,
                                   struct peer_state **peer)
 {
     struct in_addr _local_ipv4_addr_n;
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, _local_ipv4_addr, &_local_ipv4_addr_n)) {
-#else
-    if(!RtlIpv4StringToAddress(_local_ipv4_addr, FALSE, NULL, 
+#elif defined(WIN32)
+    CHAR* Term;
+    if(!RtlIpv4StringToAddress(_local_ipv4_addr, TRUE, &Term, 
                                &_local_ipv4_addr_n)) { 
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", _local_ipv4_addr);
@@ -384,9 +397,9 @@ peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
         return -1;
     }
     char key[5*8];
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     inet_ntop(AF_INET6, _local_ipv6_addr, key, sizeof(key)/sizeof(char));
-#else
+#elif defined(WIN32)
     RtlIpv6AddressToString(_local_ipv6_addr, key);
 #endif
     khint_t k = kh_get(pmap, ipv6_addr_table, key);
@@ -402,11 +415,14 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                   struct peer_state **peer)
 {
     struct in6_addr _local_ipv6_addr_n;
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET6, _local_ipv6_addr, &_local_ipv6_addr_n)) {
-#else
-    if(!RtlIpv6StringToAddressEx(_local_ipv6_addr, 
-                               &_local_ipv6_addr_n, NULL, NULL)) { 
+#elif defined(WIN32)
+    ULONG ScopeId;
+    USHORT Port;
+    LONG err = RtlIpv6StringToAddressEx(_local_ipv6_addr, 
+                                        &_local_ipv6_addr_n, &ScopeId, &Port);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv6 address format: %s\n", _local_ipv6_addr);
         return -1;
@@ -418,11 +434,13 @@ int
 override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
 {
    struct in_addr local_ipv4_addr_n;
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, _local_ipv4_addr_p, &local_ipv4_addr_n)) {
-#else
-    if(!RtlIpv4StringToAddress(_local_ipv4_addr_p, FALSE, NULL,
-                               &local_ipv4_addr_n)) {
+#elif defined(WIN32)
+    CHAR* Term;
+    LONG err = RtlIpv4StringToAddress(_local_ipv4_addr_p, TRUE, &Term,
+                                      &local_ipv4_addr_n);
+    if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", _local_ipv4_addr_p);
         return -1;
