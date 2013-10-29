@@ -354,6 +354,7 @@ int
 tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
                    unsigned int metric)
 {
+#if !defined(ANDROID)
     struct in6_rtmsg rtm6 = {
         .rtmsg_flags = RTF_UP,
         .rtmsg_ifindex = if_nametoindex(ifr.ifr_name),
@@ -375,6 +376,7 @@ tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
         tap_close();
         return -1;
     }
+#endif
     return 0;
 }
 
