@@ -48,7 +48,8 @@
 int
 socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
 {
-    int sock, optval = 1;
+    int sock;
+    char optval[4] = { 0 };
     struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
 
@@ -57,9 +58,8 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
         return -1;
     }
 
-#if defined(LINUX) || defined(ANDROID)
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-#endif
+    optval[3] = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, optval, sizeof(optval));
 
     memset(&addr, 0, addr_len);
     addr.sin_family = AF_INET;
@@ -70,7 +70,8 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
     if (!inet_pton(AF_INET, ip, &addr.sin_addr.s_addr)) {
 #elif defined(WIN32)
     CHAR* Term;
-    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term, &addr.sin_addr.s_addr);
+    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term,
+                                      (IN_ADDR *) &addr.sin_addr.s_addr);
     if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
@@ -96,7 +97,8 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
 int
 socket_utils_create_ipv6_udp_socket(const uint16_t port, uint32_t scope_id)
 {
-    int sock, optval = 1;
+    int sock;
+    char optval[4] = { 0 };
     struct sockaddr_in6 addr = {
         .sin6_family = AF_INET6,
         .sin6_port = htons(port),
@@ -111,9 +113,8 @@ socket_utils_create_ipv6_udp_socket(const uint16_t port, uint32_t scope_id)
         return -1;
     }
 
-#if defined(LINUX) || defined(ANDROID)
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-#endif
+    optval[3] = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, optval, sizeof(optval));
 
     if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
         fprintf(stderr, "bind failed\n");

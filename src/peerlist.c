@@ -132,7 +132,8 @@ peerlist_set_local(const char *_local_id,
     if (!inet_pton(AF_INET, ip, &dest_ipv4_addr.s_addr)) {
 #elif defined(WIN32)
     CHAR *Term;
-    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term, &dest_ipv4_addr.s_addr);
+    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term,
+                                      (IN_ADDR *)&dest_ipv4_addr.s_addr);
     if (err != NO_ERROR) {
 #endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);

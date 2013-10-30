@@ -31,6 +31,7 @@
 #include <winsock2.h>
 #include <iphlpapi.h>
 #include <stdio.h>
+#include <wchar.h>
 
 #include "win32_tap.h"
 
@@ -87,7 +88,7 @@ network_device_name_to_guid(const char * name, char *device_guid) {
       size = 255;
       /* We get the Name of the network interface, if it matches, let's get the
          GUID and return */
-      RegQueryValueEx(key_2, "Name", 0, NULL, name_2, &size);
+      RegQueryValueEx(key_2, "Name", 0, NULL, (LPBYTE)name_2, &size);
       if(!strcmp(name, name_2)) {
         RegCloseKey(key_0);
         RegCloseKey(key_1);
@@ -131,7 +132,8 @@ get_mac(const char *device_name, char *mac) {
   PIP_ADAPTER_ADDRESSES pCurAddresses = NULL;
   ULONG outBufLen = 15000;
   DWORD dwRetVal = 0;
-  char tmp_name[100];
+  wchar_t tmp_name[100];
+  wchar_t w_device_name[100];
   int result = 0;
 
   pAddresses = (IP_ADAPTER_ADDRESSES *) MALLOC(outBufLen);
@@ -144,8 +146,9 @@ get_mac(const char *device_name, char *mac) {
   }
   pCurAddresses = pAddresses;
   while(pCurAddresses) {
-    sprintf(tmp_name, "%wS", pCurAddresses->FriendlyName);
-    if (strcmp(device_name, tmp_name) == 0) {
+    swprintf(tmp_name, L"%s", pCurAddresses->FriendlyName);
+    swprintf(w_device_name, L"%hs", device_name);
+    if (wcscmp(tmp_name, w_device_name) == 0) {
       memcpy(mac, pCurAddresses->PhysicalAddress, 6);
       result = 1;
       break;

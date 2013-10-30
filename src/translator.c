@@ -103,7 +103,7 @@ static int
 update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
 {
     char tmp[100] = {'\0'};
-    int i, idx;
+    int i, idx = 0;
     uint16_t d_port = (buf[36] << 8 & 0xFF00) + (buf[37] & 0xFF);
     uint16_t s_port = (buf[34] << 8 & 0xFF00) + (buf[35] & 0xFF);
 
@@ -116,11 +116,11 @@ update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
             if (strncmp("http://172.", buf + i, 11) == 0) {
                 idx = ustate.s_count++;
                 memcpy(tmp, buf + i + 7, 12);
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
                 inet_aton(tmp, (struct in_addr *)ustate.server_ips[idx]);
-#else
-                RtlIpv4AddressToString(tmp,
-                    (struct in_addr *)ustate.server_ips[idx]);
+#elif defined(WIN32)
+                RtlIpv4AddressToString((IN_ADDR *)tmp,
+                                       (LPSTR)ustate.server_ips[idx]);
 #endif
                 ustate.s_ports[idx] = atoi(buf + i + 20);
                 sprintf(buf + i + 16, "%d", source[3]);
@@ -228,7 +228,7 @@ translate_packet(unsigned char *buf, const char *source, const char *dest,
 }
 
 int
-create_arp_response(char *buf)
+create_arp_response(unsigned char *buf)
 {
     uint16_t *nbuf = (uint16_t *)buf;
     int i;

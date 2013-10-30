@@ -82,14 +82,16 @@ ipop_send_thread(void *data)
             fprintf(stderr, "tap read failed\n");
             break;
         }
-#if defined(WIN32)
          if (buf[12] == 0x08 && buf[13] == 0x06) {
-             if (create_arp_response((char *)buf) == 0) {
+             if (create_arp_response(buf) == 0) {
+#if defined(LINUX) || defined(ANDROID)
+                write(tap, buf, rcount);
+#elif defined(WIN32)
                  write_tap(win32_tap, (char *)buf, rcount);
+#endif
                  continue;
              }
          }
-#endif
         if ((buf[14] >> 4) == 0x04) { // ipv4 packet
             memcpy(&local_ipv4_addr.s_addr, buf + 30, 4);
             is_ipv4 = 1;
@@ -153,6 +155,7 @@ ipop_send_thread(void *data)
     WSACleanup();
 #endif
     pthread_exit(NULL);
+    return NULL;
 }
 
 /**
@@ -229,5 +232,6 @@ ipop_recv_thread(void *data)
     WSACleanup();
 #endif
     pthread_exit(NULL);
+    return NULL;
 }
 
