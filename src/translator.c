@@ -26,9 +26,9 @@
  */
 
 #include <string.h>
-#ifndef WIN32
+#if defined(LINUX) || defined(ANDROID)
 #include <arpa/inet.h>
-#else
+#elif defined(WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #endif
@@ -178,17 +178,15 @@ update_sip(char *buf, const char *source, const char *dest,
             i++;
         }
     }
-
     return 0;
 }
 
 int
 translate_mac(unsigned char *buf, const char *mac)
 {
-#ifndef SVPN_TEST
     memcpy(buf, mac, 6);
     memset(buf + 6, 0xFF, 6);
-#endif
+
     return 0;
 }
 
@@ -196,17 +194,13 @@ int
 translate_headers(unsigned char *buf, const char *source, const char *dest,
                   ssize_t len)
 {
-#ifndef SVPN_TEST
     memcpy(buf + 26, source, 4);
-
     if ((buf[30] < 224 || buf[30] > 239) && buf[33] != 255) {
         // not multicast or broadcast
         memcpy(buf + 30, dest, 4);
     }
-#endif
 
     update_checksum(buf, 14, 24, 20);
-
     if (buf[23] == 0x06) {
         update_checksum(buf, 34, 50, len);
     }
