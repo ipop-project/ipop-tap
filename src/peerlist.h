@@ -83,19 +83,21 @@ WIN32_EXPORT int peerlist_add_p(const char *id, const char *dest_ipv4,
                                 const char *dest_ipv6, const uint16_t port);
 #endif
 int peerlist_get_by_id(const char *id, struct peer_state **peer);
-int peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
+int peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv4_addr_p(const char *_local_ipv4_addr,
                                       struct peer_state **peer);
-int peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
+int peerlist_get_by_local_ipv6_addr(struct in6_addr *_local_ipv6_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
 
 #if defined(LINUX) || defined(ANDROID)
 int override_base_ipv4_addr_p(const char *ipv4);
+int set_subnet_mask(unsigned int prefix_len);
 #elif defined(WIN32)
 WIN32_EXPORT int override_base_ipv4_addr_p(const char *ipv4);
+WIN32_EXPORT int set_subnet_mask(unsigned int prefix_len);
 #endif
 #ifdef __cplusplus
 }

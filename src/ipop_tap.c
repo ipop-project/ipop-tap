@@ -133,6 +133,12 @@ add_peer_json(json_t* peer_json)
     printf("Added peer with id: %s\n", id);
 #endif
 
+    json_t *route_json = json_object_get(peer_json, "ipv4_route");
+    if (route_json != NULL) {
+        const char *route_ipv4 = json_string_value(route_json);
+        override_base_ipv4_addr_p(route_ipv4);
+    }
+
     // peerlist_add does the memcpy of everything for us
     char peer_id[ID_SIZE];
     hex_decode(peer_id, sizeof(peer_id), id, 2 * ID_SIZE + 1);

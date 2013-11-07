@@ -59,9 +59,10 @@ static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 // will be no collisions, and thus there will be no disparity or translation!
 static struct in_addr base_ipv4_addr; // iterated when adding a peer, is
                                       // assigned to peer
+static struct in_addr subnet_mask = { .s_addr = ~(0u) };
+
 static struct peer_state null_peer = { .id = {0} };
 struct peer_state peerlist_local; // used to publicly expose the local peer info
-
 
 static int
 convert_to_hex_string(const char *source, int source_len,
@@ -77,6 +78,18 @@ convert_to_hex_string(const char *source, int source_len,
         sprintf(dest + (2*i), "%02x", *(source + i) & 0xFF);
     }
     return 0;
+}
+
+/**
+ * To ensure each client gets a unique local (virtual) ipv4 address, we keep a
+ * counter, and increment it, giving each client a sequentially assigned
+ * address.
+ */
+static inline void
+increment_base_ipv4_addr()
+{
+    unsigned char *ip = (unsigned char *)&base_ipv4_addr.s_addr;
+    ip[3]++;
 }
 
 /**
@@ -98,18 +111,6 @@ peerlist_reset_iterators()
     ipv4_iterator = kh_begin(ipv4_addr_table);
     ipv6_iterator = kh_begin(ipv6_addr_table);
     return 0;
-}
-
-/**
- * To ensure each client gets a unique local (virtual) ipv4 address, we keep a
- * counter, and increment it, giving each client a sequentially assigned
- * address.
- */
-static inline void
-increment_base_ipv4_addr()
-{
-    unsigned char *ip = (unsigned char *)&base_ipv4_addr.s_addr;
-    ip[3]++;
 }
 
 /**
@@ -227,7 +228,6 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     int ret;
     khint_t k;
 
-    // Enter everything into our tables:
     // id_table
     convert_to_hex_string(peer->id, ID_SIZE, id_key, id_key_length);
     k = kh_put(pmap, id_table, id_key, &ret);
@@ -241,12 +241,16 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     }
     kh_value(id_table, k) = peer;
 
-    // ipv4_addr_table:
+    // Router mode support
+    peer->local_ipv4_addr.s_addr &= subnet_mask.s_addr;
+
+    // ipv4_addr_table
 #if defined(LINUX) || defined(ANDROID)
     inet_ntop(AF_INET, &peer->local_ipv4_addr, ipv4_key, ipv4_key_length);
 #elif defined(WIN32)
     RtlIpv4AddressToString(&peer->local_ipv4_addr, ipv4_key);
 #endif
+    printf("PEER ADD %s\n", ipv4_key);
     k = kh_put(pmap, ipv4_addr_table, ipv4_key, &ret);
     if (ret == -1) {
         fprintf(stderr, "put failed for ipv4_table.\n"); return -1;
@@ -308,6 +312,7 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
         fprintf(stderr, "Bad IPv6 address format: %s\n", dest_ipv6);
         return -1;
     }
+
     return peerlist_add(id, &dest_ipv4_n, &dest_ipv6_n, port);
 }
 
@@ -331,7 +336,7 @@ peerlist_get_by_id(const char *id, struct peer_state **peer)
 }
 
 int
-peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
+peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
                                 struct peer_state **peer)
 {
     unsigned char start_byte =
@@ -347,6 +352,10 @@ peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
         }
         return -1;
     }
+
+    // Router mode support
+    _local_ipv4_addr->s_addr &= subnet_mask.s_addr;
+
     char key[4*4];
 #if defined(LINUX) || defined(ANDROID)
     inet_ntop(AF_INET, _local_ipv4_addr, key, sizeof(key)/sizeof(char));
@@ -380,7 +389,7 @@ peerlist_get_by_local_ipv4_addr_p(const char *_local_ipv4_addr,
 }
 
 int
-peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
+peerlist_get_by_local_ipv6_addr(struct in6_addr *_local_ipv6_addr,
                                 struct peer_state **peer)
 {
     unsigned char* bytes =
@@ -434,7 +443,7 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
 int
 override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
 {
-   struct in_addr local_ipv4_addr_n;
+    struct in_addr local_ipv4_addr_n;
 #if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, _local_ipv4_addr_p, &local_ipv4_addr_n)) {
 #elif defined(WIN32)
@@ -447,6 +456,12 @@ override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
         return -1;
     }
     memcpy(&base_ipv4_addr, &local_ipv4_addr_n, sizeof(struct in_addr));
+    return 0;
+}
+
+int set_subnet_mask(unsigned int prefix_len)
+{
+    subnet_mask.s_addr = htonl(~(0u) << (32 - prefix_len));
     return 0;
 }
 

@@ -46,7 +46,7 @@ struct upnp_state {
     char server_ips[TABLE_SIZE][4];
 };
 
-struct upnp_state ustate = { 0, 0, { 0 }};
+static struct upnp_state ustate = { 0, 0, { 0 }};
 
 static int
 update_checksum(unsigned char *buf, const int start, const int idx, ssize_t len)
@@ -182,15 +182,6 @@ update_sip(char *buf, const char *source, const char *dest,
 }
 
 int
-translate_mac(unsigned char *buf, const char *mac)
-{
-    memcpy(buf, mac, 6);
-    memset(buf + 6, 0xFF, 6);
-
-    return 0;
-}
-
-int
 translate_headers(unsigned char *buf, const char *source, const char *dest,
                   ssize_t len)
 {
@@ -222,32 +213,25 @@ translate_packet(unsigned char *buf, const char *source, const char *dest,
 }
 
 int
-create_arp_response(unsigned char *buf)
+update_mac(unsigned char* buf, const char* mac)
 {
-    uint16_t *nbuf = (uint16_t *)buf;
-    int i;
-
-    if (buf[40] == 0 && buf[41] == 2) {
-        return -1;
-    }
-
-    for (i = 0; i < 3; i++) {
-        nbuf[i] = nbuf[3 + i];
-        nbuf[3 + i] = 0xFFFF;
-    }
-
-    buf[21] = 0x02;
-
-    for (i = 0; i < 5; i++) {
-        uint16_t tmp = nbuf[16 + i];
-        nbuf[16 + i] = nbuf[11 + i];
-        if (i < 3) {
-            nbuf[11 + i] = 0xFFFF;
-        }
-        else {
-            nbuf[11 + i] = tmp;
-        }
-    }
+    memcpy(buf, mac, 6);
     return 0;
 }
+
+int
+create_arp_response(unsigned char *buf)
+{
+    char dest_ip[4];
+    memcpy(dest_ip, buf + 38, 4);
+    memcpy(buf, buf + 6, 6);
+    memset(buf + 6, 0xFF, 6);
+    buf[21] = 0x02;
+    memcpy(buf + 28, buf + 38, 4);
+    memcpy(buf + 32, buf + 22, 6);
+    memset(buf + 22, 0xFF, 6);
+    memcpy(buf + 38, dest_ip, 4);
+    return 60;
+}
+
 
