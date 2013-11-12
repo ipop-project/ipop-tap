@@ -250,7 +250,6 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
 #elif defined(WIN32)
     RtlIpv4AddressToString(&peer->local_ipv4_addr, ipv4_key);
 #endif
-    printf("PEER ADD %s\n", ipv4_key);
     k = kh_put(pmap, ipv4_addr_table, ipv4_key, &ret);
     if (ret == -1) {
         fprintf(stderr, "put failed for ipv4_table.\n"); return -1;
@@ -312,7 +311,6 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
         fprintf(stderr, "Bad IPv6 address format: %s\n", dest_ipv6);
         return -1;
     }
-
     return peerlist_add(id, &dest_ipv4_n, &dest_ipv6_n, port);
 }
 
