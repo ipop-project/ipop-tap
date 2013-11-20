@@ -84,7 +84,7 @@ ipop_send_thread(void *data)
         }
 
         if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01) {
-            if ((rcount = create_arp_response(buf) > 0)) {
+            if (create_arp_response(buf) == 0) {
 #if defined(LINUX) || defined(ANDROID)
                 write(tap, buf, rcount);
 #elif defined(WIN32)

@@ -222,16 +222,20 @@ update_mac(unsigned char* buf, const char* mac)
 int
 create_arp_response(unsigned char *buf)
 {
-    char dest_ip[4];
-    memcpy(dest_ip, buf + 38, 4);
-    memcpy(buf, buf + 6, 6);
-    memset(buf + 6, 0xFF, 6);
-    buf[21] = 0x02;
-    memcpy(buf + 28, buf + 38, 4);
-    memcpy(buf + 32, buf + 22, 6);
-    memset(buf + 22, 0xFF, 6);
-    memcpy(buf + 38, dest_ip, 4);
-    return 60;
+    // TODO - This is a hack for Windows, needs clean-up
+    if (buf[38] == 172 && buf[39] == 31 && buf[41] != 100) {
+        char dest_ip[4];
+        memcpy(dest_ip, buf + 38, 4);
+        memcpy(buf, buf + 6, 6);
+        memset(buf + 6, 0xFF, 6);
+        buf[21] = 0x02;
+        memcpy(buf + 28, buf + 38, 4);
+        memcpy(buf + 32, buf + 22, 6);
+        memset(buf + 22, 0xFF, 6);
+        memcpy(buf + 38, dest_ip, 4);
+        return 0;
+    }
+    return -1;
 }
 
 
