@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <getopt.h>
 
 #if defined(LINUX) || defined(ANDROID)
 #include <limits.h>
@@ -201,9 +202,9 @@ main(int argc, const char *argv[])
     char ipv6_addr[8*5] = { 0 };
     uint16_t port = 0;
 #if defined(LINUX) || defined(ANDROID)
-    char tap_device_name[IFNAMSIZ]; tap_device_name[0] = { 0 };
+    char tap_device_name[IFNAMSIZ] = { 0 };
 #elif defined(WIN32)
-    char tap_device_name[100]; tap_device_name[0] = { 0 };
+    char tap_device_name[100] = { 0 };
 #endif
     int verbose = 0;
 
@@ -447,8 +448,6 @@ main(int argc, const char *argv[])
             return EXIT_FAILURE;
         }
     }
-#endif
-
     pthread_t send_thread, recv_thread;
     pthread_create(&send_thread, NULL, ipop_send_thread, &opts);
     pthread_create(&recv_thread, NULL, ipop_recv_thread, &opts);
