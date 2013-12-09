@@ -25,6 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(LINUX) || defined(ANDROID)
+
 #ifndef _TAP_H_
 #define _TAP_H_
 
@@ -50,6 +52,8 @@ void tap_close();
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 #endif

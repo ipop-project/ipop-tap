@@ -28,6 +28,9 @@
 #ifndef _SVPN_H_
 #define _SVPN_H_
 
+#if defined(WIN32)
+#include "win32_tap.h"
+#endif
 #include "../lib/threadqueue/threadqueue.h"
 
 #define MTU 1280
@@ -42,6 +45,9 @@ typedef struct thread_opts {
     int sock4;
     int sock6;
     int tap;
+#if defined(WIN32)
+    windows_tap* win32_tap;
+#endif
     int translate;
     char mac[6];
     const char *local_ip4;

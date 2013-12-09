@@ -26,7 +26,13 @@
  */
 
 #include <string.h>
+#if defined(LINUX) || defined(ANDROID)
 #include <arpa/inet.h>
+#elif defined(WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -40,7 +46,7 @@ struct upnp_state {
     char server_ips[TABLE_SIZE][4];
 };
 
-struct upnp_state ustate = { 0, 0, { 0 }};
+static struct upnp_state ustate = { 0, 0, { 0 }};
 
 static int
 update_checksum(unsigned char *buf, const int start, const int idx, ssize_t len)
@@ -97,7 +103,7 @@ static int
 update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
 {
     char tmp[100] = {'\0'};
-    int i, idx;
+    int i, idx = 0;
     uint16_t d_port = (buf[36] << 8 & 0xFF00) + (buf[37] & 0xFF);
     uint16_t s_port = (buf[34] << 8 & 0xFF00) + (buf[35] & 0xFF);
 
@@ -110,7 +116,12 @@ update_upnp(char *buf, const char *source, const char *dest, ssize_t len)
             if (strncmp("http://172.", buf + i, 11) == 0) {
                 idx = ustate.s_count++;
                 memcpy(tmp, buf + i + 7, 12);
+#if defined(LINUX) || defined(ANDROID)
                 inet_aton(tmp, (struct in_addr *)ustate.server_ips[idx]);
+#elif defined(WIN32)
+                RtlIpv4AddressToString((IN_ADDR *)tmp,
+                                       (LPSTR)ustate.server_ips[idx]);
+#endif
                 ustate.s_ports[idx] = atoi(buf + i + 20);
                 sprintf(buf + i + 16, "%d", source[3]);
                 buf[i + 19] = ':';
@@ -167,17 +178,6 @@ update_sip(char *buf, const char *source, const char *dest,
             i++;
         }
     }
-
-    return 0;
-}
-
-int
-translate_mac(unsigned char *buf, const char *mac)
-{
-#ifndef SVPN_TEST
-    memcpy(buf, mac, 6);
-    memset(buf + 6, 0xFF, 6);
-#endif
     return 0;
 }
 
@@ -185,17 +185,13 @@ int
 translate_headers(unsigned char *buf, const char *source, const char *dest,
                   ssize_t len)
 {
-#ifndef SVPN_TEST
     memcpy(buf + 26, source, 4);
-
     if ((buf[30] < 224 || buf[30] > 239) && buf[33] != 255) {
         // not multicast or broadcast
         memcpy(buf + 30, dest, 4);
     }
-#endif
 
     update_checksum(buf, 14, 24, 20);
-
     if (buf[23] == 0x06) {
         update_checksum(buf, 34, 50, len);
     }
@@ -215,3 +211,31 @@ translate_packet(unsigned char *buf, const char *source, const char *dest,
     update_sip((char*)buf, source, dest, len);
     return 0;
 }
+
+int
+update_mac(unsigned char* buf, const char* mac)
+{
+    memcpy(buf, mac, 6);
+    return 0;
+}
+
+int
+create_arp_response(unsigned char *buf)
+{
+    // TODO - This is a hack for Windows, needs clean-up
+    if (buf[38] == 172 && buf[39] == 31 && buf[41] != 100) {
+        char dest_ip[4];
+        memcpy(dest_ip, buf + 38, 4);
+        memcpy(buf, buf + 6, 6);
+        memset(buf + 6, 0xFF, 6);
+        buf[21] = 0x02;
+        memcpy(buf + 28, buf + 38, 4);
+        memcpy(buf + 32, buf + 22, 6);
+        memset(buf + 22, 0xFF, 6);
+        memcpy(buf + 38, dest_ip, 4);
+        return 0;
+    }
+    return -1;
+}
+
+

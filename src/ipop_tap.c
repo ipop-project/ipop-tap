@@ -28,17 +28,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h> // used to generate random seed
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <pthread.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <getopt.h>
-#include <linux/limits.h>
+
+#if defined(LINUX) || defined(ANDROID)
+#include <limits.h>
 #include <pwd.h>
+#include <net/if.h>
+#endif
 
 #include <jansson.h>
 
@@ -50,6 +51,10 @@
 #include "packetio.h"
 #include "ipop_tap.h"
 #include "utils.h"
+
+#if defined(WIN32)
+#include "win32_tap.h"
+#endif
 
 static int generate_ipv6_address(char *prefix, unsigned short prefix_len,
                                  char *address);
@@ -82,8 +87,21 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
     return 0;
 }
 
+// http://stackoverflow.com/questions/1557400/hex-to-char-array-in-c/1557434#1557434
 static int
-add_peer_json(json_t* peer_json) {
+hex_decode(char *dest, size_t dest_len, const char *src, size_t src_len)
+{
+    int idx = 0, u;
+    while (idx < dest_len && sscanf(src, "%2x", &u) == 1) {
+        *dest++ = u & 0xFF;
+        src += 2;
+    }
+    return 0;
+}
+
+static int
+add_peer_json(json_t* peer_json)
+{
     json_t *id_json = json_object_get(peer_json, "id");
     json_t *ipv4_json = json_object_get(peer_json, "ipv4_addr");
     json_t *ipv6_json = json_object_get(peer_json, "ipv6_addr");
@@ -116,8 +134,16 @@ add_peer_json(json_t* peer_json) {
     printf("Added peer with id: %s\n", id);
 #endif
 
+    json_t *route_json = json_object_get(peer_json, "ipv4_route");
+    if (route_json != NULL) {
+        const char *route_ipv4 = json_string_value(route_json);
+        override_base_ipv4_addr_p(route_ipv4);
+    }
+
     // peerlist_add does the memcpy of everything for us
-    peerlist_add_p(id, dest_ipv4, dest_ipv6, port);
+    char peer_id[ID_SIZE];
+    hex_decode(peer_id, sizeof(peer_id), id, 2 * ID_SIZE + 1);
+    peerlist_add_p(peer_id, dest_ipv4, dest_ipv6, port);
     return 0;
 }
 
@@ -149,7 +175,11 @@ main_help(const char *executable)
            "                   you're using multiple clients on the same\n"
            "                   machine, device names must be different. Max\n"
            "                   length of %d characters. (default: 'ipop0')\n",
+#if defined(LINUX) || defined(ANDROID)
                                IFNAMSIZ-1);
+#elif defined(WIN32)
+                               99);
+#endif
     printf("    -v, --verbose: Print out extra information about what's\n"
            "                   happening.\n");
 }
@@ -167,13 +197,15 @@ main(int argc, const char *argv[])
     // mark the various configurable options as unset or as their defaults
     // (dependent on how the option must be manipulated)
     char config_file[PATH_MAX]; strcpy(config_file, "config.json");
-    char client_id[ID_SIZE] = { 0 };
+    char client_id[2*ID_SIZE + 1] = { 0 };
     char ipv4_addr[4*4] = { 0 };
     char ipv6_addr[8*5] = { 0 };
     uint16_t port = 0;
-
+#if defined(LINUX) || defined(ANDROID)
     char tap_device_name[IFNAMSIZ] = { 0 };
-
+#elif defined(WIN32)
+    char tap_device_name[100] = { 0 };
+#endif
     int verbose = 0;
 
     // Ideally we'd define defaults first, then configuration file stuff, then
@@ -340,7 +372,9 @@ main(int argc, const char *argv[])
     // This can only be done after we're sure we resolved the ipv4 and ipv6
     // addresses, but it must be done before we add any peers
     peerlist_init();
-    peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
+    char local_id[ID_SIZE];
+    hex_decode(local_id, sizeof(local_id), client_id, sizeof(client_id));
+    peerlist_set_local_p(local_id, ipv4_addr, ipv6_addr);
 
     if (json_is_object(config_json)) {
         json_t *peerlist_json = json_object_get(config_json, "peers");
@@ -357,19 +391,36 @@ main(int argc, const char *argv[])
         json_decref(config_json);
     }
 
+#if defined(WIN32)
+    int iResult;
+    WSADATA wsaData;
+    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != NO_ERROR) {
+        fprintf(stderr, "WSAStartup failed with error: %d\n", iResult);
+        return -1;
+    }
+#endif
+
     // write out the threading options to be passed to the runner threads
     thread_opts_t opts;
+#if defined(LINUX) || defined(ANDROID)
     opts.tap = tap_open(tap_device_name, opts.mac);
+#elif defined(WIN32)
+    opts.win32_tap = open_tap(tap_device_name, opts.mac);
+#endif
     opts.local_ip4 = ipv4_addr;
     opts.local_ip6 = ipv6_addr;
     opts.sock4 = socket_utils_create_ipv4_udp_socket("0.0.0.0", port);
+#if defined(LINUX) || defined(ANDROID)
     opts.sock6 = socket_utils_create_ipv6_udp_socket(
         port, if_nametoindex(tap_device_name)
     );
+#endif
     opts.translate = 1;
     opts.send_queue = NULL;
     opts.rcv_queue = NULL;
 
+#if defined(LINUX) || defined(ANDROID)
     // configure the tap device
     tap_set_ipv4_addr(ipv4_addr, 24);
     tap_set_ipv6_addr(ipv6_addr, 64);
@@ -397,11 +448,10 @@ main(int argc, const char *argv[])
             return EXIT_FAILURE;
         }
     }
-
     pthread_t send_thread, recv_thread;
     pthread_create(&send_thread, NULL, ipop_send_thread, &opts);
     pthread_create(&recv_thread, NULL, ipop_recv_thread, &opts);
     pthread_join(recv_thread, NULL);
-
+#endif
     return EXIT_SUCCESS;
 }

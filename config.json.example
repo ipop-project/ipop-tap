@@ -1,17 +1,17 @@
 {
-    "id": "alice",
+    "id": "468df36d08e878d73b90af1d33740db9e63b0245",
     "ipv6_addr": "fd50:0dbc:41f2:4a3c:b683:19a7:63b4:f736",
-    "tap_name": "svpn0",
+    "tap_name": "ipop0",
     "port": 5800,
     "peers": [
         {
-            "id": "bob",
+            "id": "7b64f0f207214f9894a2f4d08a95e57f3c773e72",
             "ipv4_addr": "10.0.0.2",
             "ipv6_addr": "fd50:0dbc:41f2:4a3c:f7f3:3c73:37ef:74a7",
             "port": 5800
         },
         {
-            "id": "chris",
+            "id": "26a6eae90012848af45cf44f981f89b997845b02",
             "ipv4_addr": "10.0.0.3",
             "ipv6_addr": "fd50:0dbc:41f2:4a3c:9bf2:40cd:6a36:a9a7",
             "port": 5800

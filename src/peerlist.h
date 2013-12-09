@@ -28,11 +28,19 @@
 #ifndef _PEERLIST_H_
 #define _PEERLIST_H_
 
+#if defined(LINUX) || defined(ANDROID)
 #include <arpa/inet.h>
+#elif defined(WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdint.h>
+#endif
 
 // normally these values are defined in ipop_tap.h:
 #define ID_SIZE 20
 #define ADDR_SIZE 32
+
+#define WIN32_EXPORT __declspec(dllexport)
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,29 +56,49 @@ struct peer_state {
 
 extern struct peer_state peerlist_local; // used to publicly expose the local
                                          // peer info
-
+#if defined(LINUX) || defined(ANDROID)
 int peerlist_init();
+#elif defined(WIN32)
+WIN32_EXPORT int peerlist_init();
+#endif
 int peerlist_reset_iterators();
 int peerlist_set_local(const char *_local_id,
                        const struct in_addr *_local_ipv4_addr,
                        const struct in6_addr *_local_ipv6_addr);
+#if defined(LINUX) || defined(ANDROID)
 int peerlist_set_local_p(const char *_local_id, const char *_local_ipv4_addr_p,
                          const char *_local_ipv6_addr_p);
+#elif defined(WIN32)
+WIN32_EXPORT int peerlist_set_local_p(const char *_local_id,
+                                      const char *_local_ipv4_addr_p,
+                                      const char *_local_ipv6_addr_p);
+#endif
 int peerlist_add(const char *id, const struct in_addr *dest_ipv4,
                  const struct in6_addr *dest_ipv6, const uint16_t port);
+#if defined(LINUX) || defined(ANDROID)
 int peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
                    const uint16_t port);
+#elif defined(WIN32)
+WIN32_EXPORT int peerlist_add_p(const char *id, const char *dest_ipv4, 
+                                const char *dest_ipv6, const uint16_t port);
+#endif
 int peerlist_get_by_id(const char *id, struct peer_state **peer);
-int peerlist_get_by_local_ipv4_addr(const struct in_addr *_local_ipv4_addr,
+int peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv4_addr_p(const char *_local_ipv4_addr,
                                       struct peer_state **peer);
-int peerlist_get_by_local_ipv6_addr(const struct in6_addr *_local_ipv6_addr,
+int peerlist_get_by_local_ipv6_addr(struct in6_addr *_local_ipv6_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
 
+#if defined(LINUX) || defined(ANDROID)
 int override_base_ipv4_addr_p(const char *ipv4);
+int set_subnet_mask(unsigned int prefix_len);
+#elif defined(WIN32)
+WIN32_EXPORT int override_base_ipv4_addr_p(const char *ipv4);
+WIN32_EXPORT int set_subnet_mask(unsigned int prefix_len);
+#endif
 #ifdef __cplusplus
 }
 #endif

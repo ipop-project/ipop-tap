@@ -32,14 +32,15 @@
 extern "C" {
 #endif
 
-int translate_mac(unsigned char *buf, const char *mac);
-
 int translate_headers(unsigned char *buf, const char *source, const char *dest,
                       ssize_t len);
 
 int translate_packet(unsigned char *buf, const char *source, const char *dest,
                      ssize_t len);
 
+int update_mac(unsigned char *buf, const char* mac);
+
+int create_arp_response(unsigned char *buf);
 #ifdef __cplusplus
 }
 #endif

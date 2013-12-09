@@ -28,10 +28,16 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <stdint.h>
+
+#if defined(LINUX) || defined(ANDROID)
+#include <sys/socket.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#elif defined(WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 
 #include "socket_utils.h"
 
@@ -42,7 +48,8 @@
 int
 socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
 {
-    int sock, optval = 1;
+    int sock;
+    char optval[4] = { 0 };
     struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
 
@@ -51,14 +58,22 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
         return -1;
     }
 
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    optval[3] = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, optval, sizeof(optval));
 
     memset(&addr, 0, addr_len);
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     //addr.sin_addr.s_addr = INADDR_ANY;
 
+#if defined(LINUX) || defined(ANDROID)
     if (!inet_pton(AF_INET, ip, &addr.sin_addr.s_addr)) {
+#elif defined(WIN32)
+    CHAR* Term;
+    LONG err = RtlIpv4StringToAddress(ip, TRUE, &Term,
+                                      (IN_ADDR *) &addr.sin_addr.s_addr);
+    if (err != NO_ERROR) {
+#endif
         fprintf(stderr, "Bad IPv4 address format: %s\n", ip);
         return -1;
     }
@@ -80,9 +95,10 @@ socket_utils_create_ipv4_udp_socket(const char* ip, uint16_t port)
  *     u_int32_t scope_id = if_nametoindex("ipop0");
  */
 int
-socket_utils_create_ipv6_udp_socket(const uint16_t port, u_int32_t scope_id)
+socket_utils_create_ipv6_udp_socket(const uint16_t port, uint32_t scope_id)
 {
-    int sock, optval = 1;
+    int sock;
+    char optval[4] = { 0 };
     struct sockaddr_in6 addr = {
         .sin6_family = AF_INET6,
         .sin6_port = htons(port),
@@ -97,7 +113,8 @@ socket_utils_create_ipv6_udp_socket(const uint16_t port, u_int32_t scope_id)
         return -1;
     }
 
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    optval[3] = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, optval, sizeof(optval));
 
     if (bind(sock, (struct sockaddr*) &addr, addr_len) < 0) {
         fprintf(stderr, "bind failed\n");

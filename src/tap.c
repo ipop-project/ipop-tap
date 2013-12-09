@@ -30,9 +30,12 @@
  * This file uses a lot of ideas from miredo/libtun6/tun6.c, so credit where
  * credit is due.
  */
+
+#if defined(LINUX) || defined(ANDROID)
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -45,34 +48,32 @@
 
 #include "tap.h"
 
-#ifndef DROID_BUILD
-
+#if defined(LINUX)
 struct in6_ifreq {
     struct in6_addr ifr6_addr;
     uint32_t ifr6_prefixlen;
     int ifr6_ifindex;
 };
-
 #endif
+
+static struct ifreq ifr;
 
 static int tap_set_flags(short enable, short disable);
 static int tap_set_proc_option(const sa_family_t family, const char *option,
                                const char *value);
 static void tap_plen_to_ipv4_mask(unsigned int prefix_len,
                                   struct sockaddr* writeback);
-
 // We must "waste" a couple sockets in order to set all the options we want:
 static int ipv4_configuration_socket = -1;
 static int ipv6_configuration_socket = -1;
 // the ifreq structure stores arguments for ioctl calls, we'll just make one in
 // open_tap and use it multiple times throughout (see also: 'man netdevice')
-static struct ifreq ifr;
 static int fd = -1; // The file descriptor used by the current TAP device
 
 // define the path of the tun device (platform specific)
-#if DROID_BUILD
+#if defined(ANDROID)
 #define TUN_PATH "/dev/tun"
-#else
+#elif defined(LINUX)
 #define TUN_PATH "/dev/net/tun"
 #endif
 
@@ -265,7 +266,6 @@ tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len)
         tap_close();
         return -1;
     }
-
     return 0;
 }
 
@@ -307,7 +307,6 @@ tap_set_ipv6_addr(const char *presentation, unsigned int prefix_len)
         tap_close();
         return -1;
     }
-
     return 0;
 }
 
@@ -342,11 +341,8 @@ tap_set_ipv4_route(const char *presentation, unsigned short prefix_len,
         tap_close();
         return -1;
     }
-
     return 0;
 }
-
-#ifndef DROID_BUILD
 
 /**
  * Tells the OS to route IPv6 addresses within the subnet (determined by the
@@ -358,6 +354,7 @@ int
 tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
                    unsigned int metric)
 {
+#if !defined(ANDROID)
     struct in6_rtmsg rtm6 = {
         .rtmsg_flags = RTF_UP,
         .rtmsg_ifindex = if_nametoindex(ifr.ifr_name),
@@ -379,11 +376,9 @@ tap_set_ipv6_route(const char *presentation, unsigned short prefix_len,
         tap_close();
         return -1;
     }
-
+#endif
     return 0;
 }
-
-#endif
 
 /**
  * Normally an IPv6 enabled system will try to set up a device with IPv6
@@ -465,5 +460,5 @@ tap_close()
     if (ipv6_configuration_socket >= 0)
         close(ipv6_configuration_socket);
 }
-
 #undef TUN_PATH
+#endif

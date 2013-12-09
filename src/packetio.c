@@ -28,10 +28,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
+
+#if defined(LINUX) || defined(ANDROID)
 #include <sys/socket.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <pthread.h>
+#elif defined(WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdint.h>
+#include <win32_tap.h>
+#endif
 
 #include "peerlist.h"
 #include "headers.h"
@@ -50,8 +58,12 @@ ipop_send_thread(void *data)
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
-    int tap = opts->tap;
     struct threadqueue *queue = opts->send_queue;
+#if defined(LINUX) || defined(ANDROID)
+    int tap = opts->tap;
+#elif defined(WIN32)
+    windows_tap *win32_tap = opts->win32_tap;
+#endif
 
     int rcount, ncount;
     unsigned char buf[BUFLEN];
@@ -62,9 +74,24 @@ ipop_send_thread(void *data)
     int result, is_ipv4;
 
     while (1) {
+#if defined(LINUX) || defined(ANDROID)
         if ((rcount = read(tap, buf, BUFLEN)) < 0) {
+#elif defined(WIN32)
+        if ((rcount = read_tap(win32_tap, (char *)buf, BUFLEN)) < 0) {
+#endif
             fprintf(stderr, "tap read failed\n");
             break;
+        }
+
+        if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01) {
+            if (create_arp_response(buf) == 0) {
+#if defined(LINUX) || defined(ANDROID)
+                write(tap, buf, rcount);
+#elif defined(WIN32)
+                write_tap(win32_tap, (char *)buf, rcount);
+#endif
+            }
+            continue;
         }
 
         if ((buf[14] >> 4) == 0x04) { // ipv4 packet
@@ -77,7 +104,6 @@ ipop_send_thread(void *data)
             fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
             continue;
         }
-
         ncount = rcount + BUF_OFFSET;
         peerlist_reset_iterators();
         while (1) {
@@ -99,7 +125,6 @@ ipop_send_thread(void *data)
             if (queue != NULL) {
                 if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
                     fprintf(stderr, "thread queue error\n");
-                    pthread_exit(NULL);
                 }
                 if (opts->send_signal != NULL) {
                   opts->send_signal(queue);
@@ -113,11 +138,10 @@ ipop_send_thread(void *data)
                     .sin_zero = { 0 }
                 };
                 // send our processed packet off
-                if (sendto(sock4, enc_buf, rcount, 0,
+                if (sendto(sock4, (const char *)enc_buf, ncount, 0,
                            (struct sockaddr *)(&dest_ipv4_addr_sock),
                            sizeof(struct sockaddr_in)) < 0) {
                     fprintf(stderr, "sendto failed\n");
-                   pthread_exit(NULL);
                 }
             }
             if (result == 0) break;
@@ -126,8 +150,14 @@ ipop_send_thread(void *data)
 
     close(sock4);
     close(sock6);
+#if defined(LINUX) || defined(ANDROID)
     tap_close();
+#elif defined(WIN32)
+    // TODO - Add close socket for tap
+    WSACleanup();
+#endif
     pthread_exit(NULL);
+    return NULL;
 }
 
 /**
@@ -140,8 +170,12 @@ ipop_recv_thread(void *data)
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
-    int tap = opts->tap;
     struct threadqueue *queue = opts->rcv_queue;
+#if defined(LINUX) || defined(ANDROID)
+    int tap = opts->tap;
+#elif defined(WIN32)
+    windows_tap *win32_tap = opts->win32_tap;
+#endif
 
     int rcount;
     struct sockaddr_in addr;
@@ -160,7 +194,7 @@ ipop_recv_thread(void *data)
               break;
             }
         }
-        else if ((rcount = recvfrom(sock4, dec_buf, BUFLEN, 0,
+        else if ((rcount = recvfrom(sock4, (char *)dec_buf, BUFLEN, 0,
                                (struct sockaddr*) &addr, &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
             break;
@@ -180,8 +214,13 @@ ipop_recv_thread(void *data)
                                   rcount);
             }
         }
-        translate_mac(buf, opts->mac);
+
+        update_mac(buf, opts->mac);
+#if defined(LINUX) || defined(ANDROID)
         if (write(tap, buf, rcount) < 0) {
+#elif defined(WIN32)
+        if (write_tap(win32_tap, (char *)buf, rcount) < 0) {
+#endif
             fprintf(stderr, "write to tap error\n");
             break;
         }
@@ -189,7 +228,13 @@ ipop_recv_thread(void *data)
 
     close(sock4);
     close(sock6);
+#if defined(LINUX) || defined(ANDROID)
     tap_close();
+#elif defined(WIN32)
+    // TODO - Add close for windows tap
+    WSACleanup();
+#endif
     pthread_exit(NULL);
+    return NULL;
 }
 

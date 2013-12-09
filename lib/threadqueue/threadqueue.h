@@ -2,9 +2,16 @@
 // http://stackoverflow.com/questions/4577961/pthread-synchronized-blocking-queue
 
 #ifndef _THREADQUEUE_H_
-#define _THREADQUEUE_H_ 1
+#define _THREADQUEUE_H_
 
+#include <sys/types.h>
 #include <pthread.h>
+
+#if defined (WIN32)
+#include <windows.h>
+#endif
+
+#define WIN32_EXPORT __declspec(dllexport)
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,7 +68,6 @@ struct threadmsg{
 
 };
 
-
 /**
  * A TthreadQueue
  *
@@ -109,7 +115,11 @@ struct threadqueue {
  * @param queue Pointer to the queue that should be initialized
  * @return 0 on success see pthread_mutex_init
  */
+#if defined (LINUX) || defined (ANDROID)
 int thread_queue_init(struct threadqueue *queue);
+#elif defined(WIN32)
+WIN32_EXPORT int thread_queue_init(struct threadqueue *queue);
+#endif
 
 /**
  * Adds a message to a queue
@@ -203,7 +213,12 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata);
  * @param len a size_t specifying the length of the message.
  * @return 0 on succes and EINVAL on failure
  */
+#if defined (LINUX) || defined (ANDROID)
 int thread_queue_bput(struct threadqueue *queue, const void *data, size_t len);
+#elif defined(WIN32)
+WIN32_EXPORT int thread_queue_bput(struct threadqueue *queue, const void *data,
+                                   size_t len);
+#endif
 
 /**
  * @ingroup ThreadQueue
@@ -217,7 +232,12 @@ int thread_queue_bput(struct threadqueue *queue, const void *data, size_t len);
  * @param len a size_t specifying the length of the message.
  * @return 0 on succes and EINVAL on failure
  */
+#if defined (LINUX) || defined (ANDROID)
 int thread_queue_bget(struct threadqueue *queue, void *buf, size_t len);
+#elif defined(WIN32)
+WIN32_EXPORT int thread_queue_bget(struct threadqueue *queue, void *buf,
+                                   size_t len);
+#endif
 #ifdef __cplusplus
 }
 #endif

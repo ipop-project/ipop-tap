@@ -28,12 +28,19 @@
 #ifndef _PACKETIO_H_
 #define _PACKETIO_H_
 
+#define WIN32_EXPORT __declspec(dllexport)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if defined(LINUX) || defined(ANDROID)
 void *ipop_send_thread(void *data);
 void *ipop_recv_thread(void *data);
+#elif defined(WIN32)
+WIN32_EXPORT void* ipop_send_thread(void *data);
+WIN32_EXPORT void* ipop_recv_thread(void *data);
+#endif
 
 #ifdef __cplusplus
 }

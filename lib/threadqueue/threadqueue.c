@@ -1,12 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <pthread.h>
 #include <sys/time.h>
 #include <stdio.h>
 
 #include "threadqueue.h"
-
 
 #define MSGPOOL_SIZE 512
 
@@ -68,7 +66,6 @@ int thread_queue_init(struct threadqueue *queue)
         pthread_cond_destroy(&queue->cond);
         return ret;
     }
-
     return 0;
 
 }
@@ -98,7 +95,6 @@ int thread_queue_add(struct threadqueue *queue, void *data, long msgtype)
                 pthread_cond_broadcast(&queue->cond);
     queue->length++;
     pthread_mutex_unlock(&queue->mutex);
-
     return 0;
 
 }
@@ -159,7 +155,6 @@ struct threadmsg *msg)
 
     release_msglist(queue,firstrec);
     pthread_mutex_unlock(&queue->mutex);
-
     return 0;
 }
 
@@ -169,7 +164,7 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata)
     struct msglist *rec;
     struct msglist *next;
     struct msglist *recs[2];
-    int ret,i;
+    int ret = 0,i;
     if (queue == NULL) {
         return EINVAL;
     }
@@ -192,9 +187,7 @@ int thread_queue_cleanup(struct threadqueue *queue, int freedata)
     pthread_mutex_unlock(&queue->mutex);
     ret = pthread_mutex_destroy(&queue->mutex);
     pthread_cond_destroy(&queue->cond);
-
     return ret;
-
 }
 
 long thread_queue_length(struct threadqueue *queue)
@@ -212,16 +205,22 @@ long thread_queue_length(struct threadqueue *queue)
 int thread_queue_bput(struct threadqueue *queue, const void *data, size_t len)
 {
     int retval = 0;
+#if defined(LINUX) || defined(ANDROID)
     struct timespec req, rem;
     req.tv_sec = 0;
     req.tv_nsec = 1000;
+#endif
 
     void *queue_data = malloc(len);
     memcpy(queue_data, data, len);
 
     while (1) {
         retval = thread_queue_add(queue, queue_data, len);
+#if defined(LINUX) || defined(ANDROID)
         if (retval == ENOMEM) nanosleep(&req, &rem);
+#elif defined(WIN32)
+        if (retval == ENOMEM) Sleep(1);
+#endif
         else break;
     }
     return retval;
