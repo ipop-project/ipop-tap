@@ -58,7 +58,6 @@ ipop_send_thread(void *data)
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
-    struct threadqueue *queue = opts->send_queue;
 #if defined(LINUX) || defined(ANDROID)
     int tap = opts->tap;
 #elif defined(WIN32)
@@ -66,8 +65,8 @@ ipop_send_thread(void *data)
 #endif
 
     int rcount, ncount;
-    unsigned char buf[BUFLEN];
     unsigned char enc_buf[BUFLEN];
+    unsigned char *buf = enc_buf + BUF_OFFSET ;
     struct in_addr local_ipv4_addr;
     struct in6_addr local_ipv6_addr;
     struct peer_state *peer = NULL;
@@ -120,14 +119,9 @@ ipop_send_thread(void *data)
             if (is_ipv4 && opts->translate) {
                 translate_packet(buf, NULL, NULL, rcount);
             }
-            // TODO - Remove this extra copy
-            memcpy(enc_buf + BUF_OFFSET, buf, rcount);
-            if (queue != NULL) {
-                if (thread_queue_bput(queue, enc_buf, ncount) < 0) {
-                    fprintf(stderr, "thread queue error\n");
-                }
-                if (opts->send_signal != NULL) {
-                  opts->send_signal(queue);
+            if (opts->send_func != NULL) {
+                if (opts->send_func((const char*)enc_buf, ncount) < 0) {
+                    fprintf(stderr, "send_func failed\n");
                 }
             }
             else {
@@ -170,7 +164,6 @@ ipop_recv_thread(void *data)
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
-    struct threadqueue *queue = opts->rcv_queue;
 #if defined(LINUX) || defined(ANDROID)
     int tap = opts->tap;
 #elif defined(WIN32)
@@ -181,28 +174,27 @@ ipop_recv_thread(void *data)
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
 
-    unsigned char buf[BUFLEN];
-    unsigned char dec_buf[BUFLEN];
+    unsigned char enc_buf[BUFLEN];
+    unsigned char *buf = enc_buf + BUF_OFFSET;
     char source_id[ID_SIZE] = { 0 };
     char dest_id[ID_SIZE] = { 0 };
     struct peer_state *peer = NULL;
 
     while (1) {
-        if (queue != NULL) {
-            if ((rcount = thread_queue_bget(queue, dec_buf, BUFLEN)) < 0) {
-              fprintf(stderr, "threadqueue get failed\n");
+        if (opts->recv_func != NULL) {
+            if ((rcount = opts->recv_func((char *)enc_buf, BUFLEN)) < 0) {
+              fprintf(stderr, "recv_func failed\n");
               break;
             }
         }
-        else if ((rcount = recvfrom(sock4, (char *)dec_buf, BUFLEN, 0,
+        else if ((rcount = recvfrom(sock4, (char *)enc_buf, BUFLEN, 0,
                                (struct sockaddr*) &addr, &addrlen)) < 0) {
             fprintf(stderr, "upd recv failed\n");
             break;
         }
 
         rcount -= BUF_OFFSET;
-        get_headers(dec_buf, source_id, dest_id);
-        memcpy(buf, dec_buf + BUF_OFFSET, rcount);
+        get_headers(enc_buf, source_id, dest_id);
         if ((buf[14] >> 4) == 0x04 && opts->translate) {
             int peer_found = peerlist_get_by_id(source_id, &peer);
             if (peer_found != -1) {
