@@ -31,7 +31,6 @@
 #if defined(WIN32)
 #include "win32_tap.h"
 #endif
-#include "../lib/threadqueue/threadqueue.h"
 
 #define MTU 1280
 #define BUFLEN 2048
@@ -52,9 +51,8 @@ typedef struct thread_opts {
     char mac[6];
     const char *local_ip4;
     const char *local_ip6;
-    struct threadqueue *send_queue;
-    struct threadqueue *rcv_queue;
-    void (*send_signal)(struct threadqueue *);
+    int (*send_func)(const char *buf, size_t len);
+    int (*recv_func)(char *buf, size_t len);
 } thread_opts_t;
 
 #endif

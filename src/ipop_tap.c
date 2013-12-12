@@ -87,18 +87,6 @@ generate_ipv6_address(char *prefix, unsigned short prefix_len, char *address)
     return 0;
 }
 
-// http://stackoverflow.com/questions/1557400/hex-to-char-array-in-c/1557434#1557434
-static int
-hex_decode(char *dest, size_t dest_len, const char *src, size_t src_len)
-{
-    int idx = 0, u;
-    while (idx < dest_len && sscanf(src, "%2x", &u) == 1) {
-        *dest++ = u & 0xFF;
-        src += 2;
-    }
-    return 0;
-}
-
 static int
 add_peer_json(json_t* peer_json)
 {
@@ -112,7 +100,6 @@ add_peer_json(json_t* peer_json)
         return -1;
     }
 
-    // TODO - Update id to be hex_encoded string
     const char *id = json_string_value(id_json);
     const char *dest_ipv4 = json_string_value(ipv4_json);
 
@@ -141,9 +128,7 @@ add_peer_json(json_t* peer_json)
     }
 
     // peerlist_add does the memcpy of everything for us
-    char peer_id[ID_SIZE];
-    hex_decode(peer_id, sizeof(peer_id), id, 2 * ID_SIZE + 1);
-    peerlist_add_p(peer_id, dest_ipv4, dest_ipv6, port);
+    peerlist_add_p(id, dest_ipv4, dest_ipv6, port);
     return 0;
 }
 
@@ -372,9 +357,7 @@ main(int argc, const char *argv[])
     // This can only be done after we're sure we resolved the ipv4 and ipv6
     // addresses, but it must be done before we add any peers
     peerlist_init();
-    char local_id[ID_SIZE];
-    hex_decode(local_id, sizeof(local_id), client_id, sizeof(client_id));
-    peerlist_set_local_p(local_id, ipv4_addr, ipv6_addr);
+    peerlist_set_local_p(client_id, ipv4_addr, ipv6_addr);
 
     if (json_is_object(config_json)) {
         json_t *peerlist_json = json_object_get(config_json, "peers");
@@ -417,8 +400,8 @@ main(int argc, const char *argv[])
     );
 #endif
     opts.translate = 1;
-    opts.send_queue = NULL;
-    opts.rcv_queue = NULL;
+    opts.send_func = NULL;
+    opts.recv_func = NULL;
 
 #if defined(LINUX) || defined(ANDROID)
     // configure the tap device
