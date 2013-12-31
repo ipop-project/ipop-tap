@@ -74,9 +74,9 @@ ipop_send_thread(void *data)
 
     while (1) {
 #if defined(LINUX) || defined(ANDROID)
-        if ((rcount = read(tap, buf, BUFLEN)) < 0) {
+        if ((rcount = read(tap, buf, BUFLEN-BUF_OFFSET)) < 0) {
 #elif defined(WIN32)
-        if ((rcount = read_tap(win32_tap, (char *)buf, BUFLEN)) < 0) {
+        if ((rcount = read_tap(win32_tap, (char *)buf, BUFLEN-BUF_OFFSET)) < 0) {
 #endif
             fprintf(stderr, "tap read failed\n");
             break;
