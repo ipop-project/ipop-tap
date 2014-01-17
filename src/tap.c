@@ -168,7 +168,8 @@ tap_set_flags(short enable, short disable)
 int
 tap_set_base_flags()
 {
-    return tap_set_flags(IFF_NOARP, IFF_MULTICAST | IFF_BROADCAST);
+    //return tap_set_flags(IFF_NOARP, IFF_MULTICAST | IFF_BROADCAST);
+    return tap_set_flags(IFF_NOARP, (short)0);
 }
 
 /**
