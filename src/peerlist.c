@@ -59,7 +59,13 @@ static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 // will be no collisions, and thus there will be no disparity or translation!
 static struct in_addr base_ipv4_addr; // iterated when adding a peer, is
                                       // assigned to peer
+
+
+// Stores the local subnet mask 
 static struct in_addr subnet_mask = { .s_addr = ~(0u) };
+
+// Stores the subnet mask for router mode
+static struct in_addr router_subnet_mask = { .s_addr = ~(0u) };
 
 static struct peer_state null_peer = { .id = {0} };
 struct peer_state peerlist_local; // used to publicly expose the local peer info
@@ -242,7 +248,7 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
     kh_value(id_table, k) = peer;
 
     // Router mode support
-    peer->local_ipv4_addr.s_addr &= subnet_mask.s_addr;
+    peer->local_ipv4_addr.s_addr &= router_subnet_mask.s_addr;
 
     // ipv4_addr_table
 #if defined(LINUX) || defined(ANDROID)
@@ -352,7 +358,7 @@ peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
     }
 
     // Router mode support
-    _local_ipv4_addr->s_addr &= subnet_mask.s_addr;
+    _local_ipv4_addr->s_addr &= router_subnet_mask.s_addr;
 
     char key[4*4];
 #if defined(LINUX) || defined(ANDROID)
@@ -457,9 +463,24 @@ override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
     return 0;
 }
 
-int set_subnet_mask(unsigned int prefix_len)
+int
+set_subnet_mask(unsigned int mask_len, unsigned int router_mask_len)
 {
-    subnet_mask.s_addr = htonl(~(0u) << (32 - prefix_len));
+    subnet_mask.s_addr = htonl(~(0u) << (32 - mask_len));
+    router_subnet_mask.s_addr = htonl(~(0u) << (32 - router_mask_len));
+    return 0;
+}
+
+int
+check_network_range(struct in_addr ip_addr)
+{
+    struct in_addr tmp_addr = local_ipv4_addr;
+    if (ip_addr.s_addr == tmp_addr.s_addr) return -1;
+
+    tmp_addr.s_addr &= subnet_mask.s_addr;
+    ip_addr.s_addr &= subnet_mask.s_addr;
+
+    if (tmp_addr.s_addr == ip_addr.s_addr) return 1;
     return 0;
 }
 

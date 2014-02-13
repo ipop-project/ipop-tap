@@ -91,13 +91,15 @@ int peerlist_get_by_local_ipv6_addr(struct in6_addr *_local_ipv6_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
+int check_network_range(struct in_addr ip_addr);
 
 #if defined(LINUX) || defined(ANDROID)
 int override_base_ipv4_addr_p(const char *ipv4);
-int set_subnet_mask(unsigned int prefix_len);
+int set_subnet_mask(unsigned int mask_len, unsigned int router_mask_len);
 #elif defined(WIN32)
 WIN32_EXPORT int override_base_ipv4_addr_p(const char *ipv4);
-WIN32_EXPORT int set_subnet_mask(unsigned int prefix_len);
+WIN32_EXPORT int set_subnet_mask(unsigned int mask_len,
+                                 unsigned int router_mask_len);
 #endif
 #ifdef __cplusplus
 }
