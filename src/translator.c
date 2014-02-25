@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "peerlist.h"
+
 // TODO - This limited table size breaks upnp translator when full
 #define TABLE_SIZE 100
 
@@ -222,8 +224,10 @@ update_mac(unsigned char* buf, const char* mac)
 int
 create_arp_response(unsigned char *buf)
 {
-    // TODO - This is a hack for Windows, needs clean-up
-    if (buf[38] == 172 && buf[39] == 31 && buf[41] != 100) {
+    struct in_addr dest_ip;
+    memcpy(&dest_ip, buf + 38, sizeof(dest_ip));
+
+    if (check_network_range(dest_ip)) {
         char dest_ip[4];
         memcpy(dest_ip, buf + 38, 4);
         memcpy(buf, buf + 6, 6);
