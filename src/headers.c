@@ -33,6 +33,7 @@
 int
 get_headers(const unsigned char *buf, char *source_id, char *dest_id)
 {
+    // reads the 20-byte source and dest uids from 40-byte header
     memcpy(source_id, buf, ID_SIZE);
     memcpy(dest_id, buf + ID_SIZE, ID_SIZE);
     return 0;
@@ -41,6 +42,7 @@ get_headers(const unsigned char *buf, char *source_id, char *dest_id)
 int
 set_headers(unsigned char *buf, const char *source_id, const char *dest_id)
 {
+    // copies 20-byte source and dest uids to create 40-byte header
     memcpy(buf, source_id, ID_SIZE);
     memcpy(buf + ID_SIZE, dest_id, ID_SIZE);
     return 0;

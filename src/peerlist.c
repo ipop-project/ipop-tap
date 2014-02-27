@@ -114,6 +114,7 @@ peerlist_init()
 int
 peerlist_reset_iterators()
 {
+    // the klib library requires that we initialize the tables
     ipv4_iterator = kh_begin(ipv4_addr_table);
     ipv6_iterator = kh_begin(ipv6_addr_table);
     return 0;
