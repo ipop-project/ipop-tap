@@ -187,18 +187,28 @@ int
 translate_headers(unsigned char *buf, const char *source, const char *dest,
                   ssize_t len)
 {
+    // overwrites the old source ip with new source ip assign locally
+    // these mappings are stored in peerlist
     memcpy(buf + 26, source, 4);
+
+    // check to see if packets are mutlicast or broadcast, if so we do not
+    // update the destination address because they do not need translation
     if ((buf[30] < 224 || buf[30] > 239) && buf[33] != 255) {
         // not multicast or broadcast
         memcpy(buf + 30, dest, 4);
     }
 
+    // This first update checksum call will update the IPv4 header checksum
     update_checksum(buf, 14, 24, 20);
+
+    // check to see if this is a TCP packet, if so, we also need to update
+    // its checksum just in case we have modified the packet with our
+    // UPNP or MDNS translators
     if (buf[23] == 0x06) {
         update_checksum(buf, 34, 50, len);
     }
     else if (buf[23] == 0x11 && buf[21] == 0 && !(buf[20] & 0x01)) {
-        // checksum disabled for UDP
+        // checksum disabled for UDP since it is optional checksum
         buf[40] = 0x00;
         buf[41] = 0x00;
     }
@@ -227,6 +237,11 @@ create_arp_response(unsigned char *buf)
     struct in_addr dest_ip;
     memcpy(&dest_ip, buf + 38, sizeof(dest_ip));
 
+    // In some cases we have to response appropriately to ARP packets.
+    // if the ARP request is within our subnet, we basically respond
+    // with the broadcast address FF:FF:FF:FF:FF:FF
+    // TODO - In future we will need to maintain an ARP table to support
+    // node migration with the network
     if (check_network_range(dest_ip)) {
         char dest_ip[4];
         memcpy(dest_ip, buf + 38, 4);

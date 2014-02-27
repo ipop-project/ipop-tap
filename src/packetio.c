@@ -55,6 +55,8 @@
 void *
 ipop_send_thread(void *data)
 {
+    // thread_opts data structure is shared by both send and recv threads
+    // so do not modify its contents only read
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
@@ -65,8 +67,12 @@ ipop_send_thread(void *data)
 #endif
 
     int rcount, ncount;
-    unsigned char enc_buf[BUFLEN];
-    unsigned char *buf = enc_buf + BUF_OFFSET ;
+
+    // ipop_buf will contain 40-byte header + ethernet frame
+    unsigned char ipop_buf[BUFLEN];
+
+    // BUF_OFFSET leaves 40-bytes for header
+    unsigned char *buf = ipop_buf + BUF_OFFSET ;
     struct in_addr local_ipv4_addr;
     struct in6_addr local_ipv6_addr;
     struct peer_state *peer = NULL;
@@ -82,6 +88,7 @@ ipop_send_thread(void *data)
             break;
         }
 
+        // checks to see if this is an ARP request, if so, send response
         if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01) {
             if (create_arp_response(buf) == 0) {
 #if defined(LINUX) || defined(ANDROID)
@@ -103,7 +110,11 @@ ipop_send_thread(void *data)
             fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
             continue;
         }
+
+        // we need to update the size of packet to account for ipop header
         ncount = rcount + BUF_OFFSET;
+
+        // we need to initialize peerlist
         peerlist_reset_iterators();
         while (1) {
             if (is_ipv4) {
@@ -114,17 +125,34 @@ ipop_send_thread(void *data)
                 result = peerlist_get_by_local_ipv6_addr(&local_ipv6_addr,
                                                          &peer);
             }
+
+            // -1 means something went wrong, should not happen
             if (result == -1) break;
-            set_headers(enc_buf, peerlist_local.id, peer->id);
+
+            // we set ipop header by copying local peer uid as first 20-bytes
+            // and then dest peer uid as the next 20-bytes. That is necessary
+            // for routing by upper layers
+            set_headers(ipop_buf, peerlist_local.id, peer->id);
+
+            // we only translate if we have IPv4 packet and translate is on
             if (is_ipv4 && opts->translate) {
                 translate_packet(buf, NULL, NULL, rcount);
             }
+
+            // If the send_func function pointer is set then we use that to
+            // send packet to upper layers, in IPOP-Tincan this function just
+            // adds to a send blocking queue. If this is not set, then we
+            // send to the IP/port stored in the peerlist when the node was
+            // added to the network
             if (opts->send_func != NULL) {
-                if (opts->send_func((const char*)enc_buf, ncount) < 0) {
+                if (opts->send_func((const char*)ipop_buf, ncount) < 0) {
                     fprintf(stderr, "send_func failed\n");
                 }
             }
             else {
+                // this is portion of the code allows ipop-tap nodes to
+                // communicate directly among themselves if necessary but
+                // there is no encryption provided with this approach
                 struct sockaddr_in dest_ipv4_addr_sock = {
                     .sin_family = AF_INET,
                     .sin_port = htons(peer->port),
@@ -132,7 +160,7 @@ ipop_send_thread(void *data)
                     .sin_zero = { 0 }
                 };
                 // send our processed packet off
-                if (sendto(sock4, (const char *)enc_buf, ncount, 0,
+                if (sendto(sock4, (const char *)ipop_buf, ncount, 0,
                            (struct sockaddr *)(&dest_ipv4_addr_sock),
                            sizeof(struct sockaddr_in)) < 0) {
                     fprintf(stderr, "sendto failed\n");
@@ -161,6 +189,8 @@ ipop_send_thread(void *data)
 void *
 ipop_recv_thread(void *data)
 {
+    // thread_opts data structure is shared by both send and recv threads
+    // so do not modify its contents only read
     thread_opts_t *opts = (thread_opts_t *) data;
     int sock4 = opts->sock4;
     int sock6 = opts->sock6;
@@ -174,41 +204,64 @@ ipop_recv_thread(void *data)
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
 
-    unsigned char enc_buf[BUFLEN];
-    unsigned char *buf = enc_buf + BUF_OFFSET;
+    // ipop_buf will contain 40-byte header + ethernet frame
+    unsigned char ipop_buf[BUFLEN];
+
+    // ipop_buf will contain 40-byte header + ethernet frame
+    unsigned char *buf = ipop_buf + BUF_OFFSET;
     char source_id[ID_SIZE] = { 0 };
     char dest_id[ID_SIZE] = { 0 };
     struct peer_state *peer = NULL;
 
     while (1) {
+        // if recv function pointer is set then use that to get packets
+        // in IPOP-Tincan, this just reads from a recv blocking queue.
+        // Otherwise, just read from the UDP socket
         if (opts->recv_func != NULL) {
             // read from ipop-tincan
-            if ((rcount = opts->recv_func((char *)enc_buf, BUFLEN)) < 0) {
+            if ((rcount = opts->recv_func((char *)ipop_buf, BUFLEN)) < 0) {
               fprintf(stderr, "recv_func failed\n");
               break;
             }
         }
-        else if ((rcount = recvfrom(sock4, (char *)enc_buf, BUFLEN, 0,
+        else if ((rcount = recvfrom(sock4, (char *)ipop_buf, BUFLEN, 0,
                                (struct sockaddr*) &addr, &addrlen)) < 0) {
             // read from UDP socket (useful for testing)
             fprintf(stderr, "udp recv failed\n");
             break;
         }
 
+        // update packet size to remove 40-byte header size, this is
+        // important to have correct size when writing packet to VNIC
         rcount -= BUF_OFFSET;
-        get_headers(enc_buf, source_id, dest_id);
+
+        // read the 20-byte source and dest uids from the ipop header
+        get_headers(ipop_buf, source_id, dest_id);
+
+        // perform translation if IPv4 and translate is enabled
         if ((buf[14] >> 4) == 0x04 && opts->translate) {
             int peer_found = peerlist_get_by_id(source_id, &peer);
+            // -1 indicates that no peer was found in the list so translation
+            // cannot be performed, it is important to keep in mind that the
+            // packet will get written to OS even if it is not translated
+            // this is necessary for multicast and broadcast packets.
+            // TODO - Do not allow untranslated packets to go to OS in svpn
             if (peer_found != -1) {
+                // this call updates IP packet payload for MDNS and UPNP
                 translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                                 (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                                 rcount);
+                // this call updates the IPv4 header with locally assign source
+                // and destination ip addresses obtained from the peerlist
                 translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
                                   (char *)(&peerlist_local.local_ipv4_addr.s_addr),
                                   rcount);
             }
         }
 
+        // it is important to make sure Eternet frame has the correct dest mac
+        // address for OS to accept the packet. Since ipop tap mac address is
+        // only known locally, this is a mandatory step
         update_mac(buf, opts->mac);
 #if defined(LINUX) || defined(ANDROID)
         if (write(tap, buf, rcount) < 0) {
