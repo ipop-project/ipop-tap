@@ -182,6 +182,7 @@ ipop_recv_thread(void *data)
 
     while (1) {
         if (opts->recv_func != NULL) {
+            // read from ipop-tincan
             if ((rcount = opts->recv_func((char *)enc_buf, BUFLEN)) < 0) {
               fprintf(stderr, "recv_func failed\n");
               break;
@@ -189,7 +190,8 @@ ipop_recv_thread(void *data)
         }
         else if ((rcount = recvfrom(sock4, (char *)enc_buf, BUFLEN, 0,
                                (struct sockaddr*) &addr, &addrlen)) < 0) {
-            fprintf(stderr, "upd recv failed\n");
+            // read from UDP socket (useful for testing)
+            fprintf(stderr, "udp recv failed\n");
             break;
         }
 
