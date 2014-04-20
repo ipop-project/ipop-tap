@@ -79,6 +79,9 @@ ipop_send_thread(void *data)
     int result, is_ipv4;
 
     while (1) {
+
+        int arp=0;
+
 #if defined(LINUX) || defined(ANDROID)
         if ((rcount = read(tap, buf, BUFLEN-BUF_OFFSET)) < 0) {
 #elif defined(WIN32)
@@ -89,7 +92,8 @@ ipop_send_thread(void *data)
         }
 
         // checks to see if this is an ARP request, if so, send response
-        if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01) {
+        if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01 
+            && opts->switchmode == 0) {
             if (create_arp_response(buf) == 0) {
 #if defined(LINUX) || defined(ANDROID)
                 write(tap, buf, rcount);
@@ -100,12 +104,15 @@ ipop_send_thread(void *data)
             continue;
         }
 
+
         if ((buf[14] >> 4) == 0x04) { // ipv4 packet
             memcpy(&local_ipv4_addr.s_addr, buf + 30, 4);
             is_ipv4 = 1;
         } else if ((buf[14] >> 4) == 0x06) { // ipv6 packet
             memcpy(&local_ipv6_addr.s6_addr, buf + 38, 16);
             is_ipv4 = 0;
+        } else if (buf[12] == 0x08 && buf[13] == 0x06 && opts->switchmode==1) {
+            arp = 1;
         } else {
             fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
             continue;
@@ -132,7 +139,13 @@ ipop_send_thread(void *data)
             // we set ipop header by copying local peer uid as first 20-bytes
             // and then dest peer uid as the next 20-bytes. That is necessary
             // for routing by upper layers
-            set_headers(ipop_buf, peerlist_local.id, peer->id);
+            if (arp == 0) {
+                set_headers(ipop_buf, peerlist_local.id, peer->id);
+            } else if (arp == 1) {
+                // ARP message should not be forwarded to peers but to 
+                // controller only
+                set_headers(ipop_buf, peerlist_local.id, null_peer.id);
+            }
 
             // we only translate if we have IPv4 packet and translate is on
             if (is_ipv4 && opts->translate) {
@@ -262,7 +275,11 @@ ipop_recv_thread(void *data)
         // it is important to make sure Eternet frame has the correct dest mac
         // address for OS to accept the packet. Since ipop tap mac address is
         // only known locally, this is a mandatory step
-        update_mac(buf, opts->mac);
+        // When we need to broadcast arp request message it should be destined to 
+        // every nodes in l2 network, so we do not update mac of destination.
+        if ( !(buf[12] == 0x08 && buf[13] == 0x06 && opts->switchmode == 1) ) {
+            update_mac(buf, opts->mac);
+        }
 #if defined(LINUX) || defined(ANDROID)
         if (write(tap, buf, rcount) < 0) {
 #elif defined(WIN32)
