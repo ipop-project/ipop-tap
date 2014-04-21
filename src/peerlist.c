@@ -67,7 +67,7 @@ static struct in_addr subnet_mask = { .s_addr = ~(0u) };
 // Stores the subnet mask for router mode
 static struct in_addr router_subnet_mask = { .s_addr = ~(0u) };
 
-static struct peer_state null_peer = { .id = {0} };
+struct peer_state null_peer = { .id = {0} };
 struct peer_state peerlist_local; // used to publicly expose the local peer info
 
 static int
