@@ -1,8 +1,7 @@
 # build with: make
 # run with:   sudo make exec
-CC=gcc
 MINGWCC=i686-w64-mingw32-gcc
-CFLAGS=-Wall --std=gnu99
+CFLAGS=-Wall -Werror --std=gnu99
 CFLAGS_DEPLOY=-O3
 CFLAGS_DEBUG=-g -O0 -D DEBUG # Include debug symbols, disable optimizations, etc
 SRC_DIR=src

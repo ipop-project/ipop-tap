@@ -1,0 +1,7 @@
+language: c
+script: make
+compiler:
+  - gcc
+  - clang
+notifications:
+  irc: "chat.freenode.net#ipop"
