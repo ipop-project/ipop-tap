@@ -80,7 +80,7 @@ ipop_send_thread(void *data)
 
     while (1) {
 
-        int arp=0;
+        int arp = 0;
 
 #if defined(LINUX) || defined(ANDROID)
         if ((rcount = read(tap, buf, BUFLEN-BUF_OFFSET)) < 0) {
@@ -93,13 +93,19 @@ ipop_send_thread(void *data)
 
         // checks to see if this is an ARP request, if so, send response
         if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01 
-            && opts->switchmode == 0) {
+            && !opts->switchmode) {
             if (create_arp_response(buf) == 0) {
 #if defined(LINUX) || defined(ANDROID)
-                write(tap, buf, rcount);
+                int r = write(tap, buf, rcount);
 #elif defined(WIN32)
-                write_tap(win32_tap, (char *)buf, rcount);
+                int r = write_tap(win32_tap, (char *)buf, rcount);
 #endif
+                // This doesn't handle partial writes yet, we need a loop to
+                // guarantee a full write.
+                if (r < 0) {
+                    fprintf(stderr, "tap write failed\n");
+                    break;
+                }
             }
             continue;
         }
@@ -111,8 +117,9 @@ ipop_send_thread(void *data)
         } else if ((buf[14] >> 4) == 0x06) { // ipv6 packet
             memcpy(&local_ipv6_addr.s6_addr, buf + 38, 16);
             is_ipv4 = 0;
-        } else if (buf[12] == 0x08 && buf[13] == 0x06 && opts->switchmode==1) {
+        } else if (buf[12] == 0x08 && buf[13] == 0x06 && opts->switchmode) {
             arp = 1;
+            is_ipv4 = 0;
         } else {
             fprintf(stderr, "unknown IP packet type: 0x%x\n", buf[14] >> 4);
             continue;
@@ -124,11 +131,10 @@ ipop_send_thread(void *data)
         // we need to initialize peerlist
         peerlist_reset_iterators();
         while (1) {
-            if (is_ipv4) {
+            if (arp || is_ipv4) {
                 result = peerlist_get_by_local_ipv4_addr(&local_ipv4_addr,
                                                          &peer);
-            }
-            else {
+            } else {
                 result = peerlist_get_by_local_ipv6_addr(&local_ipv6_addr,
                                                          &peer);
             }
@@ -136,19 +142,19 @@ ipop_send_thread(void *data)
             // -1 means something went wrong, should not happen
             if (result == -1) break;
 
-            // we set ipop header by copying local peer uid as first 20-bytes
-            // and then dest peer uid as the next 20-bytes. That is necessary
-            // for routing by upper layers
-            if (arp == 0) {
-                set_headers(ipop_buf, peerlist_local.id, peer->id);
-            } else if (arp == 1) {
+            if (arp) {
                 // ARP message should not be forwarded to peers but to 
                 // controller only
                 set_headers(ipop_buf, peerlist_local.id, null_peer.id);
+            } else {
+                // we set ipop header by copying local peer uid as first
+                // 20-bytes and then dest peer uid as the next 20-bytes. That is
+                // necessary for routing by upper layers
+                set_headers(ipop_buf, peerlist_local.id, peer->id);
             }
 
             // we only translate if we have IPv4 packet and translate is on
-            if (is_ipv4 && opts->translate) {
+            if (!arp && is_ipv4 && opts->translate) {
                 translate_packet(buf, NULL, NULL, rcount);
             }
 
