@@ -48,6 +48,7 @@ typedef struct thread_opts {
     windows_tap* win32_tap;
 #endif
     int translate;
+    int switchmode;
     char mac[6];
     const char *local_ip4;
     const char *local_ip6;
