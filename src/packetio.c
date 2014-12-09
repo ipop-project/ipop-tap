@@ -283,7 +283,17 @@ ipop_recv_thread(void *data)
         // only known locally, this is a mandatory step
         // When we need to broadcast arp request message it should be destined to 
         // every nodes in l2 network, so we do not update mac of destination.
-        if ( !(buf[12] == 0x08 && buf[13] == 0x06 && opts->switchmode == 1) ) {
+        // In switchmode, the destination mac address should be the mac address
+        // of container mac address not the ipop mac address. update_mac changes
+        // destination mac address to ipop mac address. Then the frame does not 
+        // reach to container. More accurate implementation would be tap device
+        // keeping ARP table or query O/S whether certain mac address is in 
+        // network. But, we simply check src_mac == dest_mac. If it is the same
+        // we assume both mac address is remote ipop mac, thus update it to 
+        // local one, otherwise, we assume it comes from the remote container.   
+        if ( opts->switchmode == 0 || (buf[0] == buf[6] && buf[1] == buf[7] &&
+             buf[2] == buf[8] && buf[3] == buf[9] && buf[4] == buf[10] &&
+             buf[5] == buf[11] && opts->switchmode == 1)) {
             update_mac(buf, opts->mac);
         }
 #if defined(LINUX) || defined(ANDROID)
