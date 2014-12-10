@@ -268,32 +268,33 @@ ipop_recv_thread(void *data)
             if (peer_found != -1) {
                 // this call updates IP packet payload for MDNS and UPNP
                 translate_packet(buf, (char *)(&peer->local_ipv4_addr.s_addr),
-                                (char *)(&peerlist_local.local_ipv4_addr.s_addr),
-                                rcount);
+                               (char *)(&peerlist_local.local_ipv4_addr.s_addr),
+                               rcount);
                 // this call updates the IPv4 header with locally assign source
                 // and destination ip addresses obtained from the peerlist
                 translate_headers(buf, (char *)(&peer->local_ipv4_addr.s_addr),
-                                  (char *)(&peerlist_local.local_ipv4_addr.s_addr),
-                                  rcount);
+                               (char *)(&peerlist_local.local_ipv4_addr.s_addr),
+                               rcount);
             }
         }
 
         // it is important to make sure Eternet frame has the correct dest mac
         // address for OS to accept the packet. Since ipop tap mac address is
         // only known locally, this is a mandatory step
-        // When we need to broadcast arp request message it should be destined to 
-        // every nodes in l2 network, so we do not update mac of destination.
+        // When we need to broadcast arp request message it should be destined
+        // to every nodes in l2 network, so we do not update mac of destination.
+
         // In switchmode, the destination mac address should be the mac address
-        // of container mac address not the ipop mac address. update_mac changes
-        // destination mac address to ipop mac address. Then the frame does not 
-        // reach to container. More accurate implementation would be tap device
+        // of final destination mac address but not the ipop mac address. Here, 
+        // if the source mac address (buf[6:12]) is the same with the
+        // destination  mac address (buf[0:6]), we regard this frame from the
+        // remote host. If it is different, we think this frame comes from the
+        // container. 
+        // More accurate implementation would be tap device
         // keeping ARP table or query O/S whether certain mac address is in 
-        // network. But, we simply check src_mac == dest_mac. If it is the same
-        // we assume both mac address is remote ipop mac, thus update it to 
-        // local one, otherwise, we assume it comes from the remote container.   
-        if ( opts->switchmode == 0 || (buf[0] == buf[6] && buf[1] == buf[7] &&
-             buf[2] == buf[8] && buf[3] == buf[9] && buf[4] == buf[10] &&
-             buf[5] == buf[11] && opts->switchmode == 1)) {
+        // network. 
+        if ( opts->switchmode == 0 || 
+             memcmp(buf, buf+6, 6) == 0 && opts->switchmode == 1) { 
             update_mac(buf, opts->mac);
         }
 #if defined(LINUX) || defined(ANDROID)
