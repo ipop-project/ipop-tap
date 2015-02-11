@@ -400,7 +400,6 @@ main(int argc, const char *argv[])
     );
 #endif
     opts.translate = 1;
-    opts.switchmode = 0;
     opts.send_func = NULL;
     opts.recv_func = NULL;
 

@@ -36,6 +36,7 @@ extern "C" {
 
 int tap_open(const char *device, char *mac);
 int tap_set_base_flags();
+int tap_unset_noarp_flags();
 int tap_set_up();
 int tap_set_down();
 int tap_set_mtu(int mtu);

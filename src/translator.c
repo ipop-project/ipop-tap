@@ -257,4 +257,17 @@ create_arp_response(unsigned char *buf)
     return -1;
 }
 
+int
+is_arp_req(const unsigned char *buf)
+{
+  //if ( buf[0] == 0xff && buf[1] == 0xff && buf[2] == 0xff && buf[3] == 0xff && buf[4] == 0xff && buf[5] == 0xff && buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01 ) {
+  return buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01;
+}
+
+int
+is_arp_resp(const unsigned char *buf)
+{
+  return buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x02;
+}
+
 
