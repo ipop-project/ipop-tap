@@ -98,41 +98,18 @@ ipop_send_thread(void *data)
         Switchmode
         ---------------------------------------------------------------------*/
         if (opts->switchmode) {
-            /* If the frame is broadcast ARP REQ message, it sends the frame to
-               every TinCan links like physical switch does */
-            if (is_arp_req(buf)) {
+            /* If the frame is broadcast message, it sends the frame to
+               every TinCan links as physical switch does */
+            if (is_broadcast(buf)) {
                 reset_id_table();
                 while( !is_id_table_end() ) {
                     if ( is_id_exist() )  {
                         /* TODO It may be better to retrieve the iterator rather
                            than key string itself.  */
-                        retrieve_id(&id_key);
-                        peerlist_get_by_ids(id_key, &peer);
+                        peer = retrieve_peer();
                         set_headers(ipop_buf, peerlist_local.id, peer->id);
                         if (opts->send_func != NULL) {
                             if (opts->send_func((const char*)ipop_buf, ncount) < 0) {
-                                fprintf(stderr, "send_func failed\n");
-                            }
-                        }
-                    }
-                    increase_id_table_itr();
-                }
-                continue;
-
-            /* Floods ARP response message to every TinCan links.
-               TODO we must change to send ARP response message to a single
-               TinCan link. */
-            } else if (is_arp_resp(buf))  {
-                reset_id_table();
-                while( !is_id_table_end() ) {
-                    if ( is_id_exist() )  {
-                        retrieve_id(&id_key);
-                        peerlist_get_by_ids(id_key, &peer);
-                        set_headers(ipop_buf, peerlist_local.id, peer->id);
-                        if (opts->send_func != NULL) {
-                            printf("sent arp message\n");
-                            if (opts->send_func((const char*)ipop_buf,
-                                                 ncount) < 0) {
                                 fprintf(stderr, "send_func failed\n");
                             }
                         }

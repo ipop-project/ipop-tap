@@ -612,6 +612,14 @@ retrieve_id(const char ** key)
    *key = kh_key(id_table, id_iterator);
 }
 
+struct peer_state *
+retrieve_peer()
+{
+    struct peer_state *peer;
+    peer = kh_value(id_table, id_iterator);
+    return peer;
+}
+
 void
 iterate_id_table()
 {

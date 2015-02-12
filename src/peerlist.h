@@ -98,6 +98,7 @@ int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
                                       struct peer_state **peer);
 int peerlist_get_by_mac_addr(const unsigned char * buf, struct peer_state **peer);
 int check_network_range(struct in_addr ip_addr);
+struct peer_state * retrieve_peer();
 
 #if defined(LINUX) || defined(ANDROID)
 int override_base_ipv4_addr_p(const char *ipv4);
