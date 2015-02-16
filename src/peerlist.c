@@ -40,10 +40,15 @@
 #include "../lib/klib/khash.h"
 
 KHASH_MAP_INIT_STR(pmap, struct peer_state*)
+/* KHASH only use a integer or string as a key
+   We convert 48bit MAC address to 64bit integer as a key */
+KHASH_MAP_INIT_INT64(64, struct peer_state*)
 
 static khash_t(pmap) *id_table;
 static khash_t(pmap) *ipv4_addr_table;
 static khash_t(pmap) *ipv6_addr_table;
+static khash_t(64) *mac_table;
+static khint_t id_iterator;
 static khint_t ipv4_iterator;
 static khint_t ipv6_iterator;
 
@@ -108,6 +113,7 @@ peerlist_init()
     id_table = kh_init(pmap);
     ipv4_addr_table = kh_init(pmap);
     ipv6_addr_table = kh_init(pmap);
+    mac_table = kh_init(64);
     return 0;
 }
 
@@ -282,7 +288,45 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
         kh_del(pmap, ipv6_addr_table, k);
     }
     kh_value(ipv6_addr_table, k) = peer;
+
+
     increment_base_ipv4_addr(); // only actually increment on success
+    return 0;
+}
+
+// Create peer with given uid and make index by uid
+int
+peerlist_add_by_uid(const char *id)
+{
+    // create and populate a peer structure
+    struct peer_state *peer = malloc(sizeof(struct peer_state));
+    if (peer == NULL) {
+        fprintf(stderr, "Not enough memory to allocate peer.\n");
+    }
+    memcpy(peer->id, id, ID_SIZE);
+
+    // Allocate space for our keys:
+    // hsearch requires our keys to be null-terminated strings, so we convert
+    // in_addr and in6_addr values with inet_ntop first, but we need to allocate
+    // space for the keys.
+    const int id_key_length = ID_SIZE * 2 + 1;
+    char *id_key = malloc(id_key_length * sizeof(char));
+
+    int ret;
+    khint_t k;
+
+    // id_table
+    convert_to_hex_string(peer->id, ID_SIZE, id_key, id_key_length);
+    k = kh_put(pmap, id_table, id_key, &ret);
+    if (ret == -1) {
+        fprintf(stderr, "put failed for id_table.\n"); return -1;
+    }
+    else if (!ret) {
+        free(&kh_key(id_table, k));
+        free(kh_value(id_table, k));
+        kh_del(pmap, id_table, k);
+    }
+    kh_value(id_table, k) = peer;
     return 0;
 }
 
@@ -321,6 +365,32 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
     return peerlist_add(id, &dest_ipv4_n, &dest_ipv6_n, port);
 }
 
+// Associate mac address with TinCan peer.
+// Fill up MAC address in peer and make index for mac as key and peer as value
+int
+mac_add(const unsigned char * ipop_buf)
+{
+
+    int id_key_length = ID_SIZE*2+1;
+    char id_key [id_key_length];
+    char * mac;
+    int ret;
+    convert_to_hex_string(ipop_buf, ID_SIZE, id_key, id_key_length);
+    struct peer_state *peer = NULL;
+    peerlist_get_by_ids(id_key, &peer);
+    int i;
+    long long key = 0;
+    for(i=0;i<6;i++) {
+        *(peer->mac)=*(ipop_buf+62+i);
+        key += (long long) *(ipop_buf+62+i) << 8*i;
+    }
+    khint_t k = kh_put(64, mac_table, key, &ret);
+    if (ret == -1) {
+        fprintf(stderr, "put failed for mac_table.\n"); return -1;
+    }
+    kh_value(mac_table, k) = peer;
+}
+
 /**
  * Given a unique 160-bit identifier, gives back a pointer to the
  * internal `peer_state` struct representation of the related peer. The
@@ -335,6 +405,16 @@ peerlist_get_by_id(const char *id, struct peer_state **peer)
     char key[id_key_length];
     convert_to_hex_string(id, ID_SIZE, key, id_key_length);
     khint_t k = kh_get(pmap, id_table, key);
+    if (k == kh_end(id_table)) return -1;
+    *peer = kh_value(id_table, k);
+    return 0;
+}
+
+//argument id is give as string
+int
+peerlist_get_by_ids(const char *id, struct peer_state **peer)
+{
+    khint_t k = kh_get(pmap, id_table, id);
     if (k == kh_end(id_table)) return -1;
     *peer = kh_value(id_table, k);
     return 0;
@@ -446,6 +526,22 @@ peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
 }
 
 int
+peerlist_get_by_mac_addr(const unsigned char * buf, struct peer_state **peer)
+{
+    long long key = 0;
+    int i;
+    for(i=0;i<6;i++) {
+        key += (long long) *(buf+i) << 8*i;
+    }
+    khint_t k = kh_get(64, mac_table, key);
+    if (k != kh_end(mac_table) && kh_exist(mac_table, k)) {
+        *peer = kh_value(mac_table, k);
+    }
+    else { *peer = &null_peer; }
+
+}
+
+int
 override_base_ipv4_addr_p(const char *_local_ipv4_addr_p)
 {
     struct in_addr local_ipv4_addr_n;
@@ -485,3 +581,52 @@ check_network_range(struct in_addr ip_addr)
     return 0;
 }
 
+int
+reset_id_table()
+{
+  id_iterator = kh_begin(id_table);
+  return 0;
+}
+
+int
+is_id_table_end()
+{
+  return (id_iterator == kh_end(id_table));
+}
+
+void
+increase_id_table_itr()
+{
+  ++id_iterator;
+}
+
+
+int
+is_id_exist() {
+  return kh_exist(id_table, id_iterator);
+}
+
+void
+retrieve_id(const char ** key)
+{
+   *key = kh_key(id_table, id_iterator);
+}
+
+struct peer_state *
+retrieve_peer()
+{
+    struct peer_state *peer;
+    peer = kh_value(id_table, id_iterator);
+    return peer;
+}
+
+void
+iterate_id_table()
+{
+    int i=0;
+    for(i=0; i<kh_end(id_table) ; i++) {
+      if (kh_exist(id_table, i)) {
+         printf("i:%d, key:%s\n", i, kh_key(id_table, i));
+      }
+    }
+}

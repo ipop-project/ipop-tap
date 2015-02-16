@@ -81,6 +81,7 @@ ipop_send_thread(void *data)
     while (1) {
 
         int arp = 0;
+        char * id_key;
 
 #if defined(LINUX) || defined(ANDROID)
         if ((rcount = read(tap, buf, BUFLEN-BUF_OFFSET)) < 0) {
@@ -91,8 +92,51 @@ ipop_send_thread(void *data)
             break;
         }
 
+        ncount = rcount + BUF_OFFSET;
+
+        /*---------------------------------------------------------------------
+        Switchmode
+        ---------------------------------------------------------------------*/
+        if (opts->switchmode) {
+            /* If the frame is broadcast message, it sends the frame to
+               every TinCan links as physical switch does */
+            if (is_broadcast(buf)) {
+                reset_id_table();
+                while( !is_id_table_end() ) {
+                    if ( is_id_exist() )  {
+                        /* TODO It may be better to retrieve the iterator rather
+                           than key string itself.  */
+                        peer = retrieve_peer();
+                        set_headers(ipop_buf, peerlist_local.id, peer->id);
+                        if (opts->send_func != NULL) {
+                            if (opts->send_func((const char*)ipop_buf, ncount) < 0) {
+                                fprintf(stderr, "send_func failed\n");
+                            }
+                        }
+                    }
+                    increase_id_table_itr();
+                }
+                continue;
+            }
+
+            /* If the MAC address is in the table, we forward the frame to
+               destined TinCan link */
+            peerlist_get_by_mac_addr(buf, &peer);
+            set_headers(ipop_buf, peerlist_local.id, peer->id);
+            if (opts->send_func != NULL) {
+                if (opts->send_func((const char*)ipop_buf, ncount) < 0) {
+                    fprintf(stderr, "send_func failed\n");
+                }
+            }
+            continue;
+        }
+
+        /*---------------------------------------------------------------------
+        Conventional IPOP Tap (non-switchmode)
+        ---------------------------------------------------------------------*/
+
         // checks to see if this is an ARP request, if so, send response
-        if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01 
+        if (buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x01
             && !opts->switchmode) {
             if (create_arp_response(buf) == 0) {
 #if defined(LINUX) || defined(ANDROID)
@@ -256,6 +300,14 @@ ipop_recv_thread(void *data)
 
         // read the 20-byte source and dest uids from the ipop header
         get_headers(ipop_buf, source_id, dest_id);
+
+
+        /* ARP message is forwarded from TinCan links. Add the mac
+           to the table  */
+        if (ipop_buf[52] == 0x08 && ipop_buf[53] == 0x06 && 
+            (ipop_buf[61] == 0x02 || ipop_buf[61] == 0x01)) {
+             mac_add(&ipop_buf);
+        }
 
         // perform translation if IPv4 and translate is enabled
         if ((buf[14] >> 4) == 0x04 && opts->translate) {

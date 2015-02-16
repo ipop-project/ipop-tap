@@ -172,6 +172,12 @@ tap_set_base_flags()
     return tap_set_flags(IFF_NOARP, (short)0);
 }
 
+int
+tap_unset_noarp_flags()
+{
+    return tap_set_flags((short)0, (short) IFF_NOARP);
+}
+
 /**
  * Configures the tap network device to be marked as "UP".
  */
