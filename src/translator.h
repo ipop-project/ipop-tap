@@ -41,6 +41,13 @@ int translate_packet(unsigned char *buf, const char *source, const char *dest,
 int update_mac(unsigned char *buf, const char* mac);
 
 int create_arp_response(unsigned char *buf);
+
+int is_broadcast(const unsigned char *buf);
+
+int is_arp_req(const unsigned char *buf);
+
+int is_arp_resp(const unsigned char *buf);
+
 #ifdef __cplusplus
 }
 #endif

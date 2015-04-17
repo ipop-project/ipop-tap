@@ -81,7 +81,6 @@ ipop_send_thread(void *data)
     while (1) {
 
         int arp = 0;
-        char * id_key;
 
 #if defined(LINUX) || defined(ANDROID)
         if ((rcount = read(tap, buf, BUFLEN-BUF_OFFSET)) < 0) {
@@ -306,7 +305,7 @@ ipop_recv_thread(void *data)
            to the table  */
         if (ipop_buf[52] == 0x08 && ipop_buf[53] == 0x06 && 
             (ipop_buf[61] == 0x02 || ipop_buf[61] == 0x01)) {
-             mac_add(&ipop_buf);
+             mac_add((const unsigned char *) &ipop_buf);
         }
 
         // perform translation if IPv4 and translate is enabled
@@ -345,8 +344,8 @@ ipop_recv_thread(void *data)
         // More accurate implementation would be tap device
         // keeping ARP table or query O/S whether certain mac address is in 
         // network. 
-        if ( opts->switchmode == 0 || 
-             memcmp(buf, buf+6, 6) == 0 && opts->switchmode == 1) { 
+        if ( opts->switchmode == 0 ||
+             (memcmp(buf, buf+6, 6) == 0 && opts->switchmode == 1)) {
             update_mac(buf, opts->mac);
         }
 #if defined(LINUX) || defined(ANDROID)
