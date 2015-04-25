@@ -146,8 +146,8 @@ get_mac(const char *device_name, char *mac) {
   }
   pCurAddresses = pAddresses;
   while(pCurAddresses) {
-    swprintf(tmp_name, (int) L"%s", pCurAddresses->FriendlyName);
-    swprintf(w_device_name, (int) L"%hs", (const wchar_t*) device_name);
+    swprintf(tmp_name, 100, L"%s", pCurAddresses->FriendlyName);
+    swprintf(w_device_name, 100, L"%hs", device_name);
     if (wcscmp(tmp_name, w_device_name) == 0) {
       memcpy(mac, pCurAddresses->PhysicalAddress, 6);
       result = 1;
