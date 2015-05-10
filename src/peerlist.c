@@ -370,12 +370,11 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 int
 mac_add(const unsigned char * ipop_buf)
 {
-
     int id_key_length = ID_SIZE*2+1;
     char id_key [id_key_length];
-    char * mac;
     int ret;
-    convert_to_hex_string(ipop_buf, ID_SIZE, id_key, id_key_length);
+    convert_to_hex_string((const char *) ipop_buf, ID_SIZE, id_key,
+                          id_key_length);
     struct peer_state *peer = NULL;
     peerlist_get_by_ids(id_key, &peer);
     int i;
@@ -389,6 +388,7 @@ mac_add(const unsigned char * ipop_buf)
         fprintf(stderr, "put failed for mac_table.\n"); return -1;
     }
     kh_value(mac_table, k) = peer;
+    return 0;
 }
 
 /**
@@ -538,7 +538,7 @@ peerlist_get_by_mac_addr(const unsigned char * buf, struct peer_state **peer)
         *peer = kh_value(mac_table, k);
     }
     else { *peer = &null_peer; }
-
+    return 0;
 }
 
 int

@@ -79,15 +79,17 @@ WIN32_EXPORT int peerlist_set_local_p(const char *_local_id,
 #endif
 int peerlist_add(const char *id, const struct in_addr *dest_ipv4,
                  const struct in6_addr *dest_ipv6, const uint16_t port);
-int peerlist_add_by_uid(const char *id);
 #if defined(LINUX) || defined(ANDROID)
 int peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
                    const uint16_t port);
+int peerlist_add_by_uid(const char *id);
 #elif defined(WIN32)
 WIN32_EXPORT int peerlist_add_p(const char *id, const char *dest_ipv4, 
                                 const char *dest_ipv6, const uint16_t port);
+WIN32_EXPORT int peerlist_add_by_uid(const char *id);
 #endif
 int peerlist_get_by_id(const char *id, struct peer_state **peer);
+int peerlist_get_by_ids(const char *id, struct peer_state **peer);
 int peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
                                     struct peer_state **peer);
 int peerlist_get_by_local_ipv4_addr_p(const char *_local_ipv4_addr,
@@ -99,6 +101,13 @@ int peerlist_get_by_local_ipv6_addr_p(const char *_local_ipv6_addr,
 int peerlist_get_by_mac_addr(const unsigned char * buf, struct peer_state **peer);
 int check_network_range(struct in_addr ip_addr);
 struct peer_state * retrieve_peer();
+int reset_id_table();
+int is_id_table_end();
+void increase_id_table_itr();
+int is_id_exist();
+void retrieve_id(const char ** key);
+void iterate_id_table();
+int mac_add(const unsigned char * ipop_buf);
 
 #if defined(LINUX) || defined(ANDROID)
 int override_base_ipv4_addr_p(const char *ipv4);

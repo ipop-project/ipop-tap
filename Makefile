@@ -10,7 +10,7 @@ BIN_DIR=bin
 LIBS=-lpthread # flags for dynamically linked libraries
 LINUX_FLAGS=-D LINUX
 WIN32_FLAGS=-D WIN32
-WIN32_LDFLAGS=-lws2_32 -lntdll -liphlpapi
+WIN32_LDFLAGS=-lws2_32 -lntdll -liphlpapi -static-libgcc
 
 # create the call to CC needed for a base build
 CC_BUILD=$(CC) $(CFLAGS) $(SRC_DIR)/*.c -I$(SRC_DIR) \
