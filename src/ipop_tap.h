@@ -50,6 +50,7 @@ typedef struct thread_opts {
     int translate;
     int switchmode;
     char mac[6];
+    char my_ip4[4];
     const char *local_ip4;
     const char *local_ip6;
     int (*send_func)(const char *buf, size_t len);
