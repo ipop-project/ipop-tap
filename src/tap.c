@@ -244,7 +244,7 @@ tap_plen_to_ipv4_mask(unsigned int prefix_len, struct sockaddr *writeback)
  * subnet, aka the routing prefix or the mask length.
  */
 int
-tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len)
+tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len, char * my_ip4)
 {
     struct sockaddr_in socket_address = {
         .sin_family = AF_INET,
@@ -260,6 +260,10 @@ tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len)
     }
     // we have to wrap our sockaddr_in struct into a sockaddr struct
     memcpy(&ifr.ifr_addr, &socket_address, sizeof(struct sockaddr));
+
+    // Copies IPv4 address to my_ip4. IPv4 address starts at sa_data[2] and
+    // terminates at sa_data[5]
+    memcpy(my_ip4, ifr.ifr_addr.sa_data+2,4); 
 
     if (ioctl(ipv4_configuration_socket, SIOCSIFADDR, &ifr) < 0) {
         fprintf(stderr, "Failed to set IPv4 tap device address\n");

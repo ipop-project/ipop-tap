@@ -377,6 +377,9 @@ mac_add(const unsigned char * ipop_buf)
                           id_key_length);
     struct peer_state *peer = NULL;
     peerlist_get_by_ids(id_key, &peer);
+    if (peer == NULL) {
+        fprintf(stderr, "Unable to find the peer with given key.\n"); return -1;
+    }
     int i;
     long long key = 0;
     for(i=0;i<6;i++) {
