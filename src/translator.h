@@ -48,6 +48,8 @@ int is_arp_req(const unsigned char *buf);
 
 int is_arp_resp(const unsigned char *buf);
 
+int is_my_ip4(const unsigned char*buf, const unsigned char *my_ip4);
+
 #ifdef __cplusplus
 }
 #endif
