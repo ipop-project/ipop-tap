@@ -336,11 +336,25 @@ ipop_recv_thread(void *data)
             continue;
         }
 
-        /* ARP message is forwarded from TinCan links. Add the mac
-           to the table  */
+        /* L2 broadcasting is forwarded from TinCan link. 
+           To make switchmode working, TinCan requires mac learning. Checking
+           all ethernet frame may be overkill. So it check only L2 broadcast
+           (for BOOTP/DHCP) and ARP for mac learning process.  */
         if (ipop_buf[52] == 0x08 && ipop_buf[53] == 0x06 && 
-            (ipop_buf[61] == 0x02 || ipop_buf[61] == 0x01)) {
-             mac_add((const unsigned char *) &ipop_buf);
+            (ipop_buf[61] == 0x02 || ipop_buf[61] == 0x01) && 
+            opts->switchmode == 1) {
+            /* ARP message is forwarded from TinCan links. Add the mac to the
+               table  */
+            arp_sha_mac_add((const unsigned char *) &ipop_buf);
+        }
+
+        if (ipop_buf[40] == 0xff && ipop_buf[41] == 0xff && 
+            ipop_buf[42] == 0xff && ipop_buf[43] == 0xff &&
+            ipop_buf[44] == 0xff && ipop_buf[45] == 0xff && 
+            opts->switchmode == 1) {
+            /* L2 Broadcast is forwarded from TinCan links. Add source mac to
+               the table  */
+            source_mac_add((const unsigned char *) &ipop_buf);
         }
 
         // perform translation if IPv4 and translate is enabled

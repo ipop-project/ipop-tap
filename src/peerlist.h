@@ -107,7 +107,7 @@ void increase_id_table_itr();
 int is_id_exist();
 void retrieve_id(const char ** key);
 void iterate_id_table();
-int mac_add(const unsigned char * ipop_buf);
+int mac_add(const unsigned char * ipop_buf, int mac_offset);
 
 #if defined(LINUX) || defined(ANDROID)
 int override_base_ipv4_addr_p(const char *ipv4);
