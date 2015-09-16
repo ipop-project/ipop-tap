@@ -258,6 +258,19 @@ create_arp_response(unsigned char *buf)
 }
 
 int
+create_arp_response_sw(unsigned char *buf, unsigned char *mac, unsigned char *my_ip4)
+{
+    memcpy(buf + 32, buf, 6);
+    memcpy(buf + 38, buf + 28, 4);
+    memcpy(buf, buf + 6, 6);
+    memcpy(buf + 6, mac, 6);
+    buf[21] = 0x02;
+    memcpy(buf + 22, mac, 6);
+    memcpy(buf + 28, my_ip4, 4);
+    return 0;
+}
+
+int
 is_broadcast(const unsigned char *buf)
 {
   return (buf[0] == 0xff && buf[1] == 0xff && buf[2] == 0xff && 
@@ -276,4 +289,9 @@ is_arp_resp(const unsigned char *buf)
   return buf[12] == 0x08 && buf[13] == 0x06 && buf[21] == 0x02;
 }
 
-
+int
+is_my_ip4(const unsigned char *buf, const unsigned char *my_ip4)
+{
+  return buf[38] == my_ip4[0] && buf[39] == my_ip4[1] &&
+         buf[40] == my_ip4[2] && buf[41] == my_ip4[3];
+}

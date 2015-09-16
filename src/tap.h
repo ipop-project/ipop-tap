@@ -40,7 +40,7 @@ int tap_unset_noarp_flags();
 int tap_set_up();
 int tap_set_down();
 int tap_set_mtu(int mtu);
-int tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len);
+int tap_set_ipv4_addr(const char *presentation, unsigned int prefix_len, char *my_ip4);
 int tap_set_ipv6_addr(const char *presentation, unsigned int prefix_len);
 int tap_set_ipv4_route(const char *presentation, unsigned short prefix_len,
                        unsigned int metric);
