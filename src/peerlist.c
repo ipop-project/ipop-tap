@@ -368,7 +368,7 @@ peerlist_add_p(const char *id, const char *dest_ipv4, const char *dest_ipv6,
 // Associate mac address with TinCan peer.
 // Fill up MAC address in peer and make index for mac as key and peer as value
 int
-mac_add(const unsigned char * ipop_buf)
+mac_add(const unsigned char * ipop_buf, int mac_offset)
 {
     int id_key_length = ID_SIZE*2+1;
     char id_key [id_key_length];
@@ -383,8 +383,8 @@ mac_add(const unsigned char * ipop_buf)
     int i;
     long long key = 0;
     for(i=0;i<6;i++) {
-        *(peer->mac)=*(ipop_buf+62+i);
-        key += (long long) *(ipop_buf+62+i) << 8*i;
+        *(peer->mac)=*(ipop_buf+mac_offset+i);
+        key += (long long) *(ipop_buf+mac_offset+i) << 8*i;
     }
     khint_t k = kh_put(64, mac_table, key, &ret);
     if (ret == -1) {
@@ -392,6 +392,19 @@ mac_add(const unsigned char * ipop_buf)
     }
     kh_value(mac_table, k) = peer;
     return 0;
+}
+
+// Associate TinCan link with Mac address of sender hareward address of ARP
+int
+arp_sha_mac_add(const unsigned char * ipop_buf) {
+    mac_add(ipop_buf, 62);
+}
+
+// Associate TinCan link with Mac address of sender hareward address of 
+// Ethernet frame
+int
+source_mac_add(const unsigned char * ipop_buf) {
+    mac_add(ipop_buf, 46);
 }
 
 /**
