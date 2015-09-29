@@ -111,7 +111,7 @@ ipop_send_thread(void *data)
 
             /* If the frame is broadcast message, it sends the frame to
                every TinCan links as physical switch does */
-            if (is_broadcast(buf)) {
+            if (is_nonunicast(buf)) {
                 reset_id_table();
                 while( !is_id_table_end() ) {
                     if ( is_id_exist() )  {
