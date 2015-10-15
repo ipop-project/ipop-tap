@@ -260,7 +260,7 @@ create_arp_response(unsigned char *buf)
 int
 create_arp_response_sw(unsigned char *buf, unsigned char *mac, unsigned char *my_ip4)
 {
-    memcpy(buf + 32, buf, 6);
+    memcpy(buf + 32, buf+6, 6);
     memcpy(buf + 38, buf + 28, 4);
     memcpy(buf, buf + 6, 6);
     memcpy(buf + 6, mac, 6);
