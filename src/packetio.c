@@ -305,6 +305,24 @@ ipop_recv_thread(void *data)
             break;
         }
 
+        /* ICC message use certain MAC address value (00-69-70-6f-70-0?) to
+           identify itself as ICC message. Generally, in this receiving thread,
+           we receive the message from TinCan link and put to tap device. But,
+           this ICC message need to go to the TinCan manager and then
+           controller.*/
+        if (is_icc(ipop_buf)) {
+            if (opts->send_func != NULL) {
+                /* Set destination and source uid field all NULL that tincan pass
+                   this message to the controller */
+                memset(ipop_buf, 0x00, ID_SIZE*2);
+                if (opts->send_func((const char*)ipop_buf,
+                    rcount + BUF_OFFSET) < 0) {
+                   fprintf(stderr, "send_func failed\n");
+                }
+            }
+            continue;
+        }
+
         // update packet size to remove 40-byte header size, this is
         // important to have correct size when writing packet to VNIC
         rcount -= BUF_OFFSET;
