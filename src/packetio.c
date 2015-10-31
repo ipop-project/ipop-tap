@@ -314,9 +314,8 @@ ipop_recv_thread(void *data)
             if (opts->send_func != NULL) {
                 /* Set destination and source uid field all NULL that tincan pass
                    this message to the controller */
-                memset(ipop_buf, 0x00, ID_SIZE*2);
-                if (opts->send_func((const char*)ipop_buf,
-                    rcount + BUF_OFFSET) < 0) {
+                memset(ipop_buf+ID_SIZE, 0x00, ID_SIZE);
+                if (opts->send_func((const char*)ipop_buf, rcount)  < 0) {
                    fprintf(stderr, "send_func failed\n");
                 }
             }
