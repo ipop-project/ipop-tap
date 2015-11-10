@@ -42,6 +42,8 @@ int update_mac(unsigned char *buf, const char* mac);
 
 int create_arp_response(unsigned char *buf);
 
+int create_arp_response_sw(unsigned char *buf, unsigned char *mac, unsigned char *my_ip4);
+
 int is_nonunicast(const unsigned char *buf);
 
 int is_broadcast(const unsigned char *buf);

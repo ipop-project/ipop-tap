@@ -397,14 +397,14 @@ mac_add(const unsigned char * ipop_buf, int mac_offset)
 // Associate TinCan link with Mac address of sender hareward address of ARP
 int
 arp_sha_mac_add(const unsigned char * ipop_buf) {
-    mac_add(ipop_buf, 62);
+    return mac_add(ipop_buf, 62);
 }
 
 // Associate TinCan link with Mac address of sender hareward address of 
 // Ethernet frame
 int
 source_mac_add(const unsigned char * ipop_buf) {
-    mac_add(ipop_buf, 46);
+    return mac_add(ipop_buf, 46);
 }
 
 /**

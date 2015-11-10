@@ -99,14 +99,19 @@ ipop_send_thread(void *data)
         if (opts->switchmode) {
 
             // Check whether target of ARP request message is tap itself
-            if (is_arp_req(buf) && is_my_ip4(buf, opts->my_ip4)) {
-                create_arp_response_sw(buf, opts->mac, opts->my_ip4);
+            if (is_arp_req(buf) &&
+                is_my_ip4(buf, (const unsigned char *) opts->my_ip4)) {
+                create_arp_response_sw(buf, (unsigned char * ) opts->mac, 
+                                       (unsigned char *) opts->my_ip4);
                 // Write back ARP reply to tap device
 #if defined(LINUX) || defined(ANDROID)
                 int r = write(tap, buf, rcount);
 #elif defined(WIN32)
                 int r = write_tap(win32_tap, (char *)buf, rcount);
 #endif
+                if (r < 0) {
+                    fprintf(stderr, "write to tap failed\n");
+                }
             }
 
             /* If the frame is broadcast message, it sends the frame to
@@ -332,7 +337,7 @@ ipop_recv_thread(void *data)
         // ARP request target the tap of myself. It create ARP reply and sends
         // back the message back to the IPOP link it comes from.
         if (is_arp_req(buf) && (opts->switchmode == 1) &&
-            is_my_ip4(buf, opts->my_ip4)) {
+            is_my_ip4(buf, (const unsigned char *) opts->my_ip4)) {
 
             // Swaps source and destination UID (IPOP link identifier)
             // so that the ARP reply message goes back to source
@@ -341,7 +346,8 @@ ipop_recv_thread(void *data)
             memcpy(ipop_buf, ipop_buf+ID_SIZE, ID_SIZE);
             memcpy(ipop_buf + ID_SIZE, temp, ID_SIZE);
 
-            create_arp_response_sw(buf, opts->mac, opts->my_ip4);
+            create_arp_response_sw(buf, (unsigned char *) opts->mac,
+                                   (unsigned char *) opts->my_ip4);
 
             if (opts->send_func != NULL) {
                 if (opts->send_func((const char*)ipop_buf,
