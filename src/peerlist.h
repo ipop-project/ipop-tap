@@ -88,6 +88,8 @@ WIN32_EXPORT int peerlist_add_p(const char *id, const char *dest_ipv4,
                                 const char *dest_ipv6, const uint16_t port);
 WIN32_EXPORT int peerlist_add_by_uid(const char *id);
 #endif
+int arp_sha_mac_add(const unsigned char * ipop_buf);
+int source_mac_add(const unsigned char * ipop_buf);
 int peerlist_get_by_id(const char *id, struct peer_state **peer);
 int peerlist_get_by_ids(const char *id, struct peer_state **peer);
 int peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
