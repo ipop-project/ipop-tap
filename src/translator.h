@@ -56,6 +56,13 @@ int is_my_ip4(const unsigned char *buf, const unsigned char *my_ip4);
 
 int is_icc(const unsigned char * buf);
 
+int is_ip4(const unsigned char *buf);
+
+int is_exceed_mtu(const unsigned char *buf, const int mtu);
+
+int create_icmp_unreachable_fragmentation_needed(unsigned char *buf, int mtu);
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -209,9 +209,16 @@ tap_set_mtu(int mtu)
 {
     ifr.ifr_mtu = mtu;
     if (ioctl(ipv6_configuration_socket, SIOCSIFMTU, &ifr) < 0) {
-        fprintf(stderr, "Set MTU failed\n");
+        fprintf(stderr, "Set MTU failed(Tried mtu size:%d)\n", mtu);
         tap_close(); return -1;
     }
+    return 0;
+}
+
+int
+tap_set_internal_mtu(int imtu)
+{
+    internal_mtu = imtu;
     return 0;
 }
 

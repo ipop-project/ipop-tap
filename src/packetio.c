@@ -114,6 +114,19 @@ ipop_send_thread(void *data)
                 }
             }
 
+            /* If the IP packet is larger than MTU it sends back ICMP
+               Destination Unreachable message with "fragmentation needed and DF
+               set" */
+            if (is_ip4(buf) && is_exceed_mtu(buf, internal_mtu)) {
+                int len = create_icmp_unreachable_fragmentation_needed(buf, internal_mtu);
+#if defined(LINUX) || defined(ANDROID)
+                int r = write(tap, buf, len);
+#elif defined(WIN32)
+                int r = write_tap(win32_tap, (char *)buf, len);
+#endif
+                continue;
+            }
+
             /* If the frame is broadcast message, it sends the frame to
                every TinCan links as physical switch does */
             if (is_nonunicast(buf)) {
