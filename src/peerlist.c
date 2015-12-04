@@ -392,8 +392,8 @@ mac_add(const unsigned char * ipop_buf, int mac_offset)
     if (ret == -1) {
         fprintf(stderr, "put failed for mac_table.\n"); return -1;
     }
-    pthread_mutex_unlock(&mac_table_lock);
     kh_value(mac_table, k) = peer;
+    pthread_mutex_unlock(&mac_table_lock);
     return 0;
 }
 
