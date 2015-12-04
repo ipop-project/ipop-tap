@@ -26,6 +26,7 @@
  */
 
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -386,10 +387,12 @@ mac_add(const unsigned char * ipop_buf, int mac_offset)
         *(peer->mac)=*(ipop_buf+mac_offset+i);
         key += (long long) *(ipop_buf+mac_offset+i) << 8*i;
     }
+    pthread_mutex_lock(&mac_table_lock);
     khint_t k = kh_put(64, mac_table, key, &ret);
     if (ret == -1) {
         fprintf(stderr, "put failed for mac_table.\n"); return -1;
     }
+    pthread_mutex_unlock(&mac_table_lock);
     kh_value(mac_table, k) = peer;
     return 0;
 }

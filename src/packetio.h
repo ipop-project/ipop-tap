@@ -37,9 +37,13 @@ extern "C" {
 #if defined(LINUX) || defined(ANDROID)
 void *ipop_send_thread(void *data);
 void *ipop_recv_thread(void *data);
+void *mac_table_mutex_lock_init();
+void *mac_table_mutex_lock_destroy();
 #elif defined(WIN32)
 WIN32_EXPORT void* ipop_send_thread(void *data);
 WIN32_EXPORT void* ipop_recv_thread(void *data);
+WIN32_EXPORT void *mac_table_mutex_lock_init();
+WIN32_EXPORT void *mac_table_mutex_lock_destroy();
 #endif
 
 #ifdef __cplusplus
