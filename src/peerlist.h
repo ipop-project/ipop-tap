@@ -60,6 +60,7 @@ extern struct peer_state peerlist_local; // used to publicly expose the local
 
 extern struct peer_state null_peer;
 
+
 #if defined(LINUX) || defined(ANDROID)
 int peerlist_init();
 #elif defined(WIN32)
@@ -122,5 +123,7 @@ WIN32_EXPORT int set_subnet_mask(unsigned int mask_len,
 #ifdef __cplusplus
 }
 #endif
+
+static pthread_mutex_t mac_table_lock;
 
 #endif

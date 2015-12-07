@@ -48,6 +48,16 @@
 #include "ipop_tap.h"
 #include "packetio.h"
 
+void *
+mac_table_mutex_lock_init() {
+    pthread_mutex_init(&mac_table_lock, NULL);
+}
+
+void *
+mac_table_mutex_lock_destroy() {
+    pthread_mutex_destroy(&mac_table_lock);
+}
+
 /**
  * Reads packet data from the tap device that was locally written, and sends it
  * off through a socket to the relevant peer(s).
