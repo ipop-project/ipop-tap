@@ -405,7 +405,8 @@ main(int argc, const char *argv[])
 
 #if defined(LINUX) || defined(ANDROID)
     // configure the tap device
-    tap_set_ipv4_addr(ipv4_addr, 24);
+	char myip[4];
+    tap_set_ipv4_addr(ipv4_addr, 24, myip);
     tap_set_ipv6_addr(ipv6_addr, 64);
     tap_set_mtu(MTU);
     tap_set_base_flags();
