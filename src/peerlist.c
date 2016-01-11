@@ -29,7 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <pthread.h>
 #if defined(LINUX) || defined(ANDROID)
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -38,6 +38,11 @@
 #include "peerlist.h"
 
 #include "../lib/klib/khash.h"
+
+static pthread_mutex_t id_tbl_lck = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mac_tbl_lck = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t ip4_tbl_lck = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t ip6_tbl_lck = PTHREAD_MUTEX_INITIALIZER;
 
 KHASH_MAP_INIT_STR(pmap, struct peer_state*)
 /* KHASH only use a integer or string as a key
@@ -52,7 +57,7 @@ static khint_t id_iterator;
 static khint_t ipv4_iterator;
 static khint_t ipv6_iterator;
 
-static char local_id[ID_SIZE]; // +1 for \0
+//static char local_id[ID_SIZE]; // +1 for \0
 static struct in_addr local_ipv4_addr; // Our virtual IPv4 address
 static struct in6_addr local_ipv6_addr; // Our virtual IPv6 address
 // With IPv4 addresses, each peer is assigned sequentially, as to prevent
@@ -109,7 +114,7 @@ increment_base_ipv4_addr()
 int
 peerlist_init()
 {
-    // init hash table
+	// init hash table
     id_table = kh_init(pmap);
     ipv4_addr_table = kh_init(pmap);
     ipv6_addr_table = kh_init(pmap);
@@ -121,8 +126,12 @@ int
 peerlist_reset_iterators()
 {
     // the klib library requires that we initialize the tables
+	pthread_mutex_lock(&ip4_tbl_lck);
+	pthread_mutex_lock(&ip6_tbl_lck);
     ipv4_iterator = kh_begin(ipv4_addr_table);
     ipv6_iterator = kh_begin(ipv6_addr_table);
+	pthread_mutex_unlock(&ip6_tbl_lck);	
+	pthread_mutex_unlock(&ip4_tbl_lck);
     return 0;
 }
 
@@ -135,7 +144,7 @@ peerlist_set_local(const char *_local_id,
                    const struct in_addr *_local_ipv4_addr,
                    const struct in6_addr *_local_ipv6_addr)
 {
-    memcpy(local_id, _local_id, ID_SIZE);
+    //memcpy(local_id, _local_id, ID_SIZE);
     memcpy(&local_ipv4_addr, _local_ipv4_addr, sizeof(struct in_addr));
     memcpy(&base_ipv4_addr,  _local_ipv4_addr, sizeof(struct in_addr));
     increment_base_ipv4_addr();
@@ -155,7 +164,7 @@ peerlist_set_local(const char *_local_id,
     }
 
     // initialize the local peer struct
-    memcpy(peerlist_local.id, local_id, ID_SIZE);
+    memcpy(peerlist_local.id, _local_id, ID_SIZE);
     peerlist_local.local_ipv4_addr = local_ipv4_addr;
     peerlist_local.local_ipv6_addr = local_ipv6_addr;
     peerlist_local.dest_ipv4_addr = dest_ipv4_addr;
@@ -243,6 +252,7 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
 
     // id_table
     convert_to_hex_string(peer->id, ID_SIZE, id_key, id_key_length);
+	pthread_mutex_lock(&id_tbl_lck);
     k = kh_put(pmap, id_table, id_key, &ret);
     if (ret == -1) {
         fprintf(stderr, "put failed for id_table.\n"); return -1;
@@ -253,7 +263,7 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
         kh_del(pmap, id_table, k);
     }
     kh_value(id_table, k) = peer;
-
+	pthread_mutex_unlock(&id_tbl_lck);
     // Router mode support
     peer->local_ipv4_addr.s_addr &= router_subnet_mask.s_addr;
 
@@ -263,15 +273,19 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
 #elif defined(WIN32)
     RtlIpv4AddressToString(&peer->local_ipv4_addr, ipv4_key);
 #endif
+	pthread_mutex_lock(&ip4_tbl_lck);
     k = kh_put(pmap, ipv4_addr_table, ipv4_key, &ret);
     if (ret == -1) {
-        fprintf(stderr, "put failed for ipv4_table.\n"); return -1;
+        fprintf(stderr, "put failed for ipv4_table.\n"); 
+		pthread_mutex_unlock(&ip4_tbl_lck);
+		return -1;
     }
     else if (!ret) {
         free(&kh_key(ipv4_addr_table, k));
         kh_del(pmap, ipv4_addr_table, k);
     }
     kh_value(ipv4_addr_table, k) = peer;
+	pthread_mutex_unlock(&ip4_tbl_lck);
 
     // ipv6_addr_table:
 #if defined(LINUX) || defined(ANDROID)
@@ -279,16 +293,19 @@ peerlist_add(const char *id, const struct in_addr *dest_ipv4,
 #elif defined(WIN32)
     RtlIpv6AddressToString(&peer->local_ipv6_addr, ipv6_key);
 #endif
+	pthread_mutex_lock(&ip6_tbl_lck);
     k = kh_put(pmap, ipv6_addr_table, ipv6_key, &ret);
     if (ret == -1) {
-        fprintf(stderr, "put failed for ipv6_table.\n"); return -1;
+        fprintf(stderr, "put failed for ipv6_table.\n"); 
+		pthread_mutex_unlock(&ip6_tbl_lck); 
+		return -1;
     }
     else if (!ret) {
         free(&kh_key(ipv6_addr_table, k));
         kh_del(pmap, ipv6_addr_table, k);
     }
     kh_value(ipv6_addr_table, k) = peer;
-
+	pthread_mutex_unlock(&ip6_tbl_lck);
 
     increment_base_ipv4_addr(); // only actually increment on success
     return 0;
@@ -317,9 +334,12 @@ peerlist_add_by_uid(const char *id)
 
     // id_table
     convert_to_hex_string(peer->id, ID_SIZE, id_key, id_key_length);
+	pthread_mutex_lock(&id_tbl_lck);
     k = kh_put(pmap, id_table, id_key, &ret);
     if (ret == -1) {
-        fprintf(stderr, "put failed for id_table.\n"); return -1;
+        fprintf(stderr, "put failed for id_table.\n"); 
+		pthread_mutex_unlock(&id_tbl_lck); 
+		return -1;
     }
     else if (!ret) {
         free(&kh_key(id_table, k));
@@ -327,6 +347,7 @@ peerlist_add_by_uid(const char *id)
         kh_del(pmap, id_table, k);
     }
     kh_value(id_table, k) = peer;
+	pthread_mutex_unlock(&id_tbl_lck);
     return 0;
 }
 
@@ -386,11 +407,15 @@ mac_add(const unsigned char * ipop_buf, int mac_offset)
         *(peer->mac)=*(ipop_buf+mac_offset+i);
         key += (long long) *(ipop_buf+mac_offset+i) << 8*i;
     }
+	pthread_mutex_lock(&mac_tbl_lck);
     khint_t k = kh_put(64, mac_table, key, &ret);
     if (ret == -1) {
-        fprintf(stderr, "put failed for mac_table.\n"); return -1;
+        fprintf(stderr, "put failed for mac_table.\n"); 
+		pthread_mutex_unlock(&mac_tbl_lck); 
+		return -1;
     }
     kh_value(mac_table, k) = peer;
+	pthread_mutex_unlock(&mac_tbl_lck);
     return 0;
 }
 
@@ -420,9 +445,14 @@ peerlist_get_by_id(const char *id, struct peer_state **peer)
     const int id_key_length = ID_SIZE * 2 + 1;
     char key[id_key_length];
     convert_to_hex_string(id, ID_SIZE, key, id_key_length);
+	pthread_mutex_lock(&id_tbl_lck);
     khint_t k = kh_get(pmap, id_table, key);
-    if (k == kh_end(id_table)) return -1;
+	if (k == kh_end(id_table)) {
+		pthread_mutex_unlock(&id_tbl_lck);
+		return -1;
+	}
     *peer = kh_value(id_table, k);
+	pthread_mutex_unlock(&id_tbl_lck);
     return 0;
 }
 
@@ -430,9 +460,14 @@ peerlist_get_by_id(const char *id, struct peer_state **peer)
 int
 peerlist_get_by_ids(const char *id, struct peer_state **peer)
 {
+	pthread_mutex_lock(&id_tbl_lck);
     khint_t k = kh_get(pmap, id_table, id);
-    if (k == kh_end(id_table)) return -1;
+    if (k == kh_end(id_table)) {
+		pthread_mutex_unlock(&id_tbl_lck);
+		return -1;
+	}
     *peer = kh_value(id_table, k);
+	pthread_mutex_unlock(&id_tbl_lck);
     return 0;
 }
 
@@ -444,16 +479,18 @@ peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
         ((unsigned char *)(&_local_ipv4_addr->s_addr))[0];
     unsigned char end_byte =
         ((unsigned char *)(&_local_ipv4_addr->s_addr))[3];
+	pthread_mutex_lock(&ip4_tbl_lck);
     if ((start_byte >= 224 && start_byte <= 239) || end_byte == 0xFF) {
         for (; ipv4_iterator < kh_end(ipv4_addr_table); ++ipv4_iterator) {
             if (kh_exist(ipv4_addr_table, ipv4_iterator)) {
                 *peer = kh_value(ipv4_addr_table, ipv4_iterator++);
-                return 1;
+				pthread_mutex_unlock(&ip4_tbl_lck); 
+				return 1;
             }
         }
+		pthread_mutex_unlock(&ip4_tbl_lck);
         return -1;
     }
-
     // Router mode support
     _local_ipv4_addr->s_addr &= router_subnet_mask.s_addr;
 
@@ -463,11 +500,13 @@ peerlist_get_by_local_ipv4_addr(struct in_addr *_local_ipv4_addr,
 #elif defined(WIN32)
     RtlIpv4AddressToString(_local_ipv4_addr, key);
 #endif
+
     khint_t k = kh_get(pmap, ipv4_addr_table, key);
     if (k != kh_end(ipv4_addr_table) && kh_exist(ipv4_addr_table, k)) {
         *peer = kh_value(ipv4_addr_table, k);
     }
     else { *peer = &null_peer; }
+	pthread_mutex_unlock(&ip4_tbl_lck);
     return 0;
 }
 
@@ -496,15 +535,18 @@ peerlist_get_by_local_ipv6_addr(struct in6_addr *_local_ipv6_addr,
     unsigned char* bytes =
         ((unsigned char *)(&_local_ipv6_addr->s6_addr));
     unsigned char type = bytes[1] & 0x0F;
+	pthread_mutex_lock(&ip6_tbl_lck);
     if (bytes[0] == 0xFF && (type == 0x05 || type == 0x08 || type == 0x0e)) {
         // if it is an IPv6 multicast address by the rules given by
         // https://en.wikipedia.org/wiki/Multicast_address#IPv6
         for (; ipv6_iterator != kh_end(ipv6_addr_table); ++ipv6_iterator) {
             if (kh_exist(ipv6_addr_table, ipv6_iterator)) {
-                *peer = kh_value(ipv6_addr_table, ipv6_iterator++);
+				*peer = kh_value(ipv6_addr_table, ipv6_iterator++);
+				pthread_mutex_unlock(&ip6_tbl_lck);
                 return 1;
             }
         }
+		pthread_mutex_unlock(&ip6_tbl_lck);
         return -1;
     }
     char key[5*8];
@@ -518,6 +560,7 @@ peerlist_get_by_local_ipv6_addr(struct in6_addr *_local_ipv6_addr,
         *peer = kh_value(ipv6_addr_table, k);
     }
     else { *peer = &null_peer; }
+	pthread_mutex_unlock(&ip6_tbl_lck);
     return 0;
 }
 
@@ -549,11 +592,13 @@ peerlist_get_by_mac_addr(const unsigned char * buf, struct peer_state **peer)
     for(i=0;i<6;i++) {
         key += (long long) *(buf+i) << 8*i;
     }
+	pthread_mutex_lock(&mac_tbl_lck);
     khint_t k = kh_get(64, mac_table, key);
     if (k != kh_end(mac_table) && kh_exist(mac_table, k)) {
         *peer = kh_value(mac_table, k);
     }
     else { *peer = &null_peer; }
+	pthread_mutex_unlock(&mac_tbl_lck);
     return 0;
 }
 
@@ -600,39 +645,55 @@ check_network_range(struct in_addr ip_addr)
 int
 reset_id_table()
 {
-  id_iterator = kh_begin(id_table);
-  return 0;
+	pthread_mutex_lock(&id_tbl_lck);
+	id_iterator = kh_begin(id_table);
+	pthread_mutex_unlock(&id_tbl_lck);
+	return 0;
 }
 
 int
 is_id_table_end()
 {
-  return (id_iterator == kh_end(id_table));
+	int rv = 0;
+	pthread_mutex_lock(&id_tbl_lck);
+	rv = (id_iterator == kh_end(id_table));
+	pthread_mutex_unlock(&id_tbl_lck);
+	return rv;
 }
 
 void
 increase_id_table_itr()
 {
-  ++id_iterator;
+	pthread_mutex_lock(&id_tbl_lck);
+	++id_iterator;
+	pthread_mutex_unlock(&id_tbl_lck);
 }
 
 
 int
 is_id_exist() {
-  return kh_exist(id_table, id_iterator);
+	int rv = 0;
+	pthread_mutex_lock(&id_tbl_lck);
+	rv = kh_exist(id_table, id_iterator);
+	pthread_mutex_unlock(&id_tbl_lck);
+	return rv;
 }
 
 void
 retrieve_id(const char ** key)
 {
+	pthread_mutex_lock(&id_tbl_lck);
    *key = kh_key(id_table, id_iterator);
+	pthread_mutex_unlock(&id_tbl_lck);
 }
 
 struct peer_state *
 retrieve_peer()
 {
     struct peer_state *peer;
+	pthread_mutex_lock(&id_tbl_lck);
     peer = kh_value(id_table, id_iterator);
+	pthread_mutex_unlock(&id_tbl_lck);
     return peer;
 }
 
@@ -640,9 +701,11 @@ void
 iterate_id_table()
 {
     int i=0;
+	pthread_mutex_lock(&id_tbl_lck);
     for(i=0; i<kh_end(id_table) ; i++) {
       if (kh_exist(id_table, i)) {
          printf("i:%d, key:%s\n", i, kh_key(id_table, i));
       }
     }
+	pthread_mutex_unlock(&id_tbl_lck);
 }
